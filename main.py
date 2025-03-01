@@ -66,7 +66,6 @@ def motion(x, y):
 
         eye = center + center_eye
         view_direction = glm.normalize(center - eye)
-        upVector = glm.normalize(glm.cross(right, view_direction))
 
     elif is_translating:
         view_direction = glm.normalize(center - eye)
