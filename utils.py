@@ -46,10 +46,12 @@ def draw_colored_cube(size_x, size_y=-1, size_z=-1):
 
 
 def draw_colored_sphere(radius):
+    quadric = gluNewQuadric()  # Quadric object 생성 (http://www.gisdeveloper.co.kr/?p=35)
     glPushMatrix()
-    glColor3fv(colors[0])
-    glutSolidSphere(radius, 30, 30)
+    glColor3fv((1.0, 0.0, 0.0))
+    gluSphere(quadric, radius, 30, 30)
     glPopMatrix()
+    gluDeleteQuadric(quadric)  # 다 쓰고 이렇게 삭제해줘야 되더라
 
 
 def draw_axes():
