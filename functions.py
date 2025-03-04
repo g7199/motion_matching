@@ -89,4 +89,4 @@ def motion_adapter(root, motion_frame):
     motion_frame = motion_frame[3:]
     add_motion(root, motion_frame, idx=[0])
 
-    return [0,0,0], root
+    return root_position, root
