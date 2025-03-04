@@ -54,25 +54,46 @@ def draw_colored_sphere(radius):
     gluDeleteQuadric(quadric)  # 다 쓰고 이렇게 삭제해줘야 되더라
 
 
-def draw_axes():
-    glLineWidth(3.0)
+def draw_axes(grid_size = 500, step = 10):
+    # grid_size를 미리 정의해서 그 길이만큼 격자랑 XYZ axis 그리게 해둠
+    # 그만큼 Clipping distance도 늘렸는데 나중에 이거랑 연동되게 하면 좋을듯
+    glLineWidth(2.0)
+
+    # Draw XYZ axes
     glBegin(GL_LINES)
-    len = 20.0
 
-    # X축 - 빨간색
+    # X-axis (Red)
     glColor3f(1.0, 0.0, 0.0)
-    glVertex3f(-len, 0.0, 0.0)  # X축의 시작점
-    glVertex3f(len, 0.0, 0.0)  # X축의 끝점
+    glVertex3f(-grid_size, 0, 0)
+    glVertex3f(grid_size, 0, 0)
 
-    # Y축 - 초록색
+    # Y-axis (Green)
     glColor3f(0.0, 1.0, 0.0)
-    glVertex3f(0.0, -len, 0.0)  # Y축의 시작점
-    glVertex3f(0.0, len, 0.0)  # Y축의 끝점
+    glVertex3f(0, -grid_size, 0)
+    glVertex3f(0, grid_size, 0)
 
-    # Z축 - 파란색
+    # Z-axis (Blue)
     glColor3f(0.0, 0.0, 1.0)
-    glVertex3f(0.0, 0.0, -len)  # Z축의 시작점
-    glVertex3f(0.0, 0.0, len)  # Z축의 끝점
+    glVertex3f(0, 0, -grid_size)
+    glVertex3f(0, 0, grid_size)
+
+    glEnd()
+
+    # 격자 그리기 위해 줄 크기 줄이기
+    glLineWidth(1.0)
+
+    # 격자 색
+    glColor3f(0.5, 0.5, 0.5)
+    glBegin(GL_LINES)
+
+    for i in range(-grid_size, grid_size + 1, step):
+        # X방향
+        glVertex3f(i, 0, -grid_size)
+        glVertex3f(i, 0, grid_size)
+
+        # Z방향
+        glVertex3f(-grid_size, 0, i)
+        glVertex3f(grid_size, 0, i)
 
     glEnd()
 

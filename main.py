@@ -47,7 +47,7 @@ def resize(window, w, h):
     glViewport(0, 0, w, h)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(45.0, w / h, 0.1, 500.0)
+    gluPerspective(45.0, w / h, 0.1, 5000.0)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
