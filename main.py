@@ -5,12 +5,17 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from utils import draw_axes, set_lights
 from draw_humanoid import *
-
+import math
 from pyglm import glm
 
 center = glm.vec3(0, 0, 0)
 eye = glm.vec3(20, 60, 200)
 upVector = glm.vec3(0, 1, 0)
+
+distance = glm.length(eye - center)
+yaw = math.atan2(eye.x - center.x, eye.z - center.z)
+pitch = math.asin((eye.y - center.y) / distance)
+
 
 last_x, last_y = 0, 0
 is_rotating = False
@@ -35,6 +40,23 @@ def display():
     draw_humanoid(root_position, root)
     glutSwapBuffers()
 
+def update_eye():
+    """카메라 담당 함수"""
+    global eye, distance, yaw, pitch, center
+    # 90° 넘어가면 뒤집히는거 방지
+    max_pitch = math.radians(89)
+    if pitch > max_pitch:
+        pitch = max_pitch
+    if pitch < -max_pitch:
+        pitch = -max_pitch
+
+    # Offset 계산
+    offset_x = distance * math.sin(yaw) * math.cos(pitch)
+    offset_y = distance * math.sin(pitch)
+    offset_z = distance * math.cos(yaw) * math.cos(pitch)
+    eye = center + glm.vec3(offset_x, offset_y, offset_z)
+
+
 
 def resize(w, h):
     glViewport(0, 0, w, h)
@@ -47,32 +69,26 @@ def resize(w, h):
 
 def motion(x, y):
     """마우스 드래그 이벤트 처리"""
-    global eye, center, upVector, last_x, last_y
+    global last_x, last_y, yaw, pitch, center, eye, distance
 
     dx = x - last_x
     dy = y - last_y
     last_x, last_y = x, y
 
     if is_rotating:
-        center_eye = eye - center
-        rotation = glm.rotate(glm.mat4(1.0), -dx * 0.01, glm.vec3(0, 1, 0))
-        center_eye = glm.vec3(rotation * glm.vec4(center_eye, 1.0))
-
-        view_direction = glm.normalize(-center_eye)
-        right = glm.normalize(glm.cross(view_direction, upVector))
-
-        rotation = glm.rotate(glm.mat4(1.0), -dy * 0.01, right)
-        center_eye = glm.vec3(rotation * glm.vec4(center_eye, 1.0))
-
-        eye = center + center_eye
-        view_direction = glm.normalize(center - eye)
+        sensitivity = 0.005
+        yaw -= dx * sensitivity
+        pitch += dy * sensitivity
+        update_eye()
 
     elif is_translating:
-        view_direction = glm.normalize(center - eye)
-        right = glm.normalize(glm.cross(view_direction, upVector))
-        translation = (-dx * right + dy * upVector) * 0.01
-        eye += translation
+        sensitivity = 0.005 * distance  # scale panning with distance
+        view_dir = glm.normalize(center - eye)
+        right = glm.normalize(glm.cross(view_dir, glm.vec3(0, 1, 0)))
+        up = glm.vec3(0, 1, 0)
+        translation = (-dx * right + dy * up) * sensitivity
         center += translation
+        update_eye()
 
     glutPostRedisplay()
 
@@ -91,11 +107,15 @@ def mouse(button, state, x, y):
 
 def mouse_wheel(button, direction, x, y):
     """마우스 휠 이벤트 처리 (Zoom In/Out)"""
-    global eye, center
-
-    zoom_speed = 0.9 if direction > 0 else 1.1
-    eye = eye * zoom_speed
-
+    global distance
+    zoom_sensitivity = 0.1
+    if direction > 0:
+        distance -= zoom_sensitivity * distance
+    else:
+        distance += zoom_sensitivity * distance
+    if distance < 0.1:
+        distance = 0.1
+    update_eye()
     glutPostRedisplay()
 
 
@@ -123,7 +143,7 @@ def main():
     glutDisplayFunc(display)
     glutMouseFunc(mouse)
     glutMotionFunc(motion)
-
+    glutMouseWheelFunc(mouse_wheel)
     glutTimerFunc(16, update, 0)
 
     glutMainLoop()
