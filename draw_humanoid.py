@@ -4,7 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
-joint_size = 0.3
+joint_size = 3
 
 from utils import *
 
@@ -47,6 +47,6 @@ def draw_bone(offset):
     glPushMatrix()
     glTranslatef(*mid)
     glMultMatrixf(np.array(rot_mat, dtype=np.float32).flatten())
-    glScalef(joint_size, abs(glm.l2Norm(offset) - 2 * joint_size) / 2, joint_size)
+    glScalef(joint_size, abs(glm.l2Norm(offset) - 2 * joint_size) / 2, joint_size/3)
     draw_colored_cube(1)
     glPopMatrix()

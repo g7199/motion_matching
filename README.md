@@ -16,7 +16,7 @@ mv your-file.bvh bvh/
 
 ### 3️⃣ Install Dependencies
 ```bash
-pip install PyOpenGL PyOpenGL_accelerate PyGLM
+pip install PyOpenGL PyOpenGL_accelerate PyGLM imgui[glfw] pygame
 ```
 
 ### 4️⃣ Run the Script
