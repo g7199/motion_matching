@@ -16,19 +16,8 @@ def draw_humanoid(root_position, root_joint):
 
 def draw_joint(joint):
     glPushMatrix()
-    glTranslatef(*joint.offset)
 
-    if joint is None:
-        return
-
-    if joint.rotation is not None:
-        for channel, angle in zip(joint.channels, joint.rotation):
-            if "Xrotation" in channel:
-                glRotatef(angle, 1, 0, 0)
-            elif "Yrotation" in channel:
-                glRotatef(angle, 0, 1, 0)
-            elif "Zrotation" in channel:
-                glRotatef(angle, 0, 0, 1)
+    glMultMatrixf(joint.kinetics.T.flatten())
 
     draw_colored_sphere(joint_size)
 

@@ -221,11 +221,37 @@ def main():
     pygame.quit()
 
 
+def check_bvh_structure(joint, is_root=False):
+    if is_root:
+        if len(joint.channels) != 6:
+            raise ValueError(f"Root joint '{joint.name}' must have 6 channels, found {len(joint.channels)}")
+        for channel in joint.channels[:3]:
+            if "position" not in channel.lower():
+                raise ValueError(
+                    f"Root joint '{joint.name}' first three channels must be position channels, found '{channel}'")
+        for channel in joint.channels[3:]:
+            if "rotation" not in channel.lower():
+                raise ValueError(
+                    f"Root joint '{joint.name}' last three channels must be rotation channels, found '{channel}'")
+    else:
+        if joint.channels:
+            if len(joint.channels) != 3:
+                raise ValueError(f"Joint '{joint.name}' must have 3 channels, found {len(joint.channels)}")
+            for channel in joint.channels:
+                if "rotation" not in channel.lower():
+                    raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
+
+    for child in joint.children:
+        check_bvh_structure(child, is_root=False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("file_path")
     args = parser.parse_args()
 
     root, motion_frames = bvh_parser(args.file_path)
+    check_bvh_structure(root, is_root=True)
+
     frame_len = len(motion_frames)
     main()
