@@ -1,80 +1,85 @@
 import argparse
-import glfw
+import math
+import pygame
+from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-import math
-import glm
-from functions import *
+import imgui
+from imgui.integrations.pygame import PygameRenderer
+from pyglm import glm
+from functions import bvh_parser, motion_adapter
+from draw_humanoid import draw_humanoid
 from utils import draw_axes, set_lights
-from draw_humanoid import *
-
 
 center = glm.vec3(0, 0, 0)
-eye = glm.vec3(20, 60, 200)
+eye = glm.vec3(60, 180, 600)
 upVector = glm.vec3(0, 1, 0)
 
 distance = glm.length(eye - center)
 yaw = math.atan2(eye.x - center.x, eye.z - center.z)
 pitch = math.asin((eye.y - center.y) / distance)
 
-
 last_x, last_y = 0, 0
 is_rotating = False
 is_translating = False
+stop = False
 
 frame_idx = 0
 frame_len = None
 root = None
 motion_frames = None
+selected_joint = None
 
-# GLFW Window
-window = None
 
+def imgui_joint_tree(joint):
+    global selected_joint
+    node_open = imgui.tree_node(joint.name)
+    imgui.set_item_allow_overlap()
+    if imgui.is_item_clicked():
+        selected_joint = joint
+        print("hi")
+    if node_open:
+        for child in joint.children:
+            imgui_joint_tree(child)
+        imgui.tree_pop()
+
+def imgui_joint_control():
+    global selected_joint
+    imgui.separator()
+    imgui.text("Selected Joint Info:")
+    if selected_joint: #아직 석원이의 코딩이 안끝나서 다 고쳐지진 않았어여.
+        imgui.text(f"Name: {selected_joint.name}")
+        if hasattr(selected_joint, "rotation"):
+            pos = selected_joint.rotation
+            cha = selected_joint.channels
+
+            text = ''
+            for a, b in zip(pos, cha):
+                text += f'{b}: {a}\n'
+            imgui.text(text)
+    else:
+        imgui.text("No joint selected.")
 
 def update_eye():
-    """카메라 담당 함수"""
     global eye, distance, yaw, pitch, center
     max_pitch = math.radians(89)
     pitch = max(-max_pitch, min(pitch, max_pitch))
-
     offset_x = distance * math.sin(yaw) * math.cos(pitch)
     offset_y = distance * math.sin(pitch)
     offset_z = distance * math.cos(yaw) * math.cos(pitch)
     eye = center + glm.vec3(offset_x, offset_y, offset_z)
 
-
-def resize(window, w, h):
-    glViewport(0, 0, w, h)
+def resize(width, height):
+    glViewport(0, 0, width, height)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(45.0, w / h, 0.1, 500.0)
+    gluPerspective(45.0, width / height, 0.1, 5000.0)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
-
-def mouse(window, button, action, mods):
-    """마우스 버튼 이벤트 처리"""
-    global last_x, last_y, is_rotating, is_translating
-
-    if action == glfw.PRESS:
-        last_x, last_y = glfw.get_cursor_pos(window)
-
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            is_rotating = True
-        elif button == glfw.MOUSE_BUTTON_RIGHT:
-            is_translating = True
-
-    elif action == glfw.RELEASE:
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            is_rotating = False
-        elif button == glfw.MOUSE_BUTTON_RIGHT:
-            is_translating = False
-
-
-def motion(window, xpos, ypos):
-    """마우스 드래그 이벤트 처리"""
-    global last_x, last_y, yaw, pitch, center, eye, distance
-
+def handle_mouse_motion(event):
+    global last_x, last_y, yaw, pitch, center, eye, distance, is_rotating, is_translating
+    xpos, ypos = event.pos
     dx = xpos - last_x
     dy = ypos - last_y
     last_x, last_y = xpos, ypos
@@ -84,7 +89,6 @@ def motion(window, xpos, ypos):
         yaw -= dx * sensitivity
         pitch += dy * sensitivity
         update_eye()
-
     elif is_translating:
         sensitivity = 0.005 * distance
         view_dir = glm.normalize(center - eye)
@@ -94,84 +98,163 @@ def motion(window, xpos, ypos):
         center += translation
         update_eye()
 
+def handle_mouse_button(event):
+    global last_x, last_y, is_rotating, is_translating
+    if event.type == pygame.MOUSEBUTTONDOWN:
+        last_x, last_y = event.pos
+        if event.button == 1:
+            is_rotating = True
+        elif event.button == 3:
+            is_translating = True
+        if event.button in (4, 5):
+            handle_mouse_wheel(event)
+    elif event.type == pygame.MOUSEBUTTONUP:
+        if event.button == 1:
+            is_rotating = False
+        elif event.button == 3:
+            is_translating = False
 
-def mouse_wheel(window, x_offset, y_offset):
-    """마우스 휠 이벤트 처리"""
+def handle_mouse_wheel(event):
     global distance
     zoom_sensitivity = 0.1
-    distance -= zoom_sensitivity * y_offset * distance
+    if hasattr(event, 'y'):
+        distance -= zoom_sensitivity * event.y * distance
+    else:
+        if event.button == 4:
+            distance -= zoom_sensitivity * distance
+        elif event.button == 5:
+            distance += zoom_sensitivity * distance
     distance = max(distance, 0.1)
     update_eye()
 
-
 def render():
-    """렌더링 처리 함수"""
     global root, frame_idx
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
-
     gluLookAt(eye.x, eye.y, eye.z,
               center.x, center.y, center.z,
               upVector.x, upVector.y, upVector.z)
-
     draw_axes()
-    root_position, root_node = motion_adapter(root, motion_frames[frame_idx])
+    root_position, _ = motion_adapter(root, motion_frames[frame_idx])
     draw_humanoid(root_position, root)
 
-
 def main():
-    global window, frame_idx, frame_len, root, motion_frames
+    global frame_idx, frame_len, root, motion_frames, last_x, last_y, stop
+    pygame.init()
+    size = (800, 600)
+    screen = pygame.display.set_mode(size, pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
+    pygame.display.set_caption("BVH Viewer with ImGui Control Panel")
 
-    # Initialize GLFW
-    if not glfw.init():
-        raise Exception("GLFW could not be initialized")
-
-    window = glfw.create_window(800, 600, "BVH Viewer", None, None)
-    if not window:
-        glfw.terminate()
-        raise Exception("GLFW window creation failed")
-
-    glfw.make_context_current(window)
     glEnable(GL_DEPTH_TEST)
     set_lights()
+    resize(*size)
 
-    # 콜백 함수들
-    glfw.set_framebuffer_size_callback(window, resize)
-    glfw.set_cursor_pos_callback(window, motion)
-    glfw.set_mouse_button_callback(window, mouse)
-    glfw.set_scroll_callback(window, mouse_wheel)
+    imgui.create_context()
+    impl = PygameRenderer()
 
-    # projection matrix 초기에 설정해줘야됨, 이거 안하면 처음에 검정화면 되더라
-    width, height = glfw.get_framebuffer_size(window)
-    resize(window, width, height)
+    clock = pygame.time.Clock()
+    previous_time = pygame.time.get_ticks() / 1000.0
+    frame_duration = 1 / 60.0
+    running = True
 
-    # FPS 정의
-    previous_time = glfw.get_time()
-    frame_duration = 1 / 60
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                continue
 
-    while not glfw.window_should_close(window):
-        current_time = glfw.get_time()
+            impl.process_event(event)
+            io = imgui.get_io()
+
+            if event.type == pygame.MOUSEWHEEL:
+                if io.want_capture_mouse:
+                    continue
+                else:
+                    handle_mouse_wheel(event)
+
+            if event.type == pygame.MOUSEMOTION:
+                if not io.want_capture_mouse:
+                    handle_mouse_motion(event)
+
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+                if not io.want_capture_mouse:
+                    handle_mouse_button(event)
+
+            if event.type == pygame.VIDEORESIZE:
+                size = event.size
+                screen = pygame.display.set_mode(size, pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
+                resize(*size)
+
+        io.display_size = pygame.display.get_surface().get_size()
+
+        current_time = pygame.time.get_ticks() / 1000.0
         delta_time = current_time - previous_time
+        if not stop:
+            if delta_time >= frame_duration:
+                frame_idx = (frame_idx + 1) % frame_len
+                previous_time = current_time
 
-        if delta_time >= frame_duration:
-            frame_idx = (frame_idx + 1) % frame_len
-            previous_time = current_time
+        # ImGui 프레임
+        imgui.new_frame()
+
+        imgui.begin("Control Panel")
+        changed, value = imgui.slider_int("Slider", frame_idx+1, 0, frame_len)
+        if imgui.button("play/pause", 100, 30):
+            stop = (stop + 1)%2
+        if changed:
+            frame_idx = value-1
+        imgui.separator()
+        imgui.text("Joint Tree:")
+        if root:
+            imgui_joint_tree(root)
+        imgui_joint_control()
+        imgui.end()
 
         render()
 
-        glfw.swap_buffers(window)
-        glfw.poll_events()
+        imgui.render()
+        impl.render(imgui.get_draw_data())
+        pygame.display.flip()
+        clock.tick(60)
 
-    glfw.terminate()
+    impl.shutdown()
+    pygame.quit()
+
+
+def check_bvh_structure(joint, is_root=False):
+    if is_root:
+        if len(joint.channels) != 6:
+            raise ValueError(f"Root joint '{joint.name}' must have 6 channels, found {len(joint.channels)}")
+        for channel in joint.channels[:3]:
+            if "position" not in channel.lower():
+                raise ValueError(
+                    f"Root joint '{joint.name}' first three channels must be position channels, found '{channel}'")
+        for channel in joint.channels[3:]:
+            if "rotation" not in channel.lower():
+                raise ValueError(
+                    f"Root joint '{joint.name}' last three channels must be rotation channels, found '{channel}'")
+    else:
+        if joint.channels:
+            if len(joint.channels) != 3:
+                for channel in joint.channels[3:]:
+                    if "rotation" not in channel.lower():
+                        raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
+            else:
+                for channel in joint.channels:
+                    if "rotation" not in channel.lower():
+                        raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
+
+    for child in joint.children:
+        check_bvh_structure(child, is_root=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("file_path")
-
     args = parser.parse_args()
-    root, motion_frames = bvh_parser(args.file_path)
-    frame_len = len(motion_frames)
 
+    root, motion_frames = bvh_parser(args.file_path)
+    check_bvh_structure(root, is_root=True)
+
+    frame_len = len(motion_frames)
     main()

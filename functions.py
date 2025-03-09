@@ -1,10 +1,12 @@
+import numpy as np
+
 class Joint:
     def __init__(self, name):
         self.name = name
         self.offset = [0, 0, 0]
         self.channels = []
         self.children = []
-        self.rotation = None
+        self.kinetics = np.identity(4,dtype=float)
 
 def bvh_parser(file_path):
     stack = []
@@ -36,6 +38,7 @@ def bvh_parser(file_path):
 
                 if parts[0] in ["ROOT", "JOINT", "End"]:
                     node = Joint(parts[1])
+                    node.parent = cur_node
                     if not root:
                         root = node
                     if cur_node:
@@ -78,15 +81,65 @@ def add_motion(node, motion_frame, idx=[0]):
         return
 
     if node.name != "Site":
-        node.rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
-        idx[0] += 3
+        if len(node.channels) == 6:
+            idx[0] += 3
+            rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.kinetics = compute_forward_kinetics(node,rotation)
+            idx[0] += 3
+        elif len(node.channels) == 3:
+            rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.kinetics = compute_forward_kinetics(node,rotation)
+            idx[0] += 3
+
 
     for child in node.children:
         add_motion(child, motion_frame, idx)
 
 def motion_adapter(root, motion_frame):
-    root_position = list(map(float, motion_frame[:3]))
-    motion_frame = motion_frame[3:]
     add_motion(root, motion_frame, idx=[0])
+    root_position = list(map(float, motion_frame[:3]))
 
     return root_position, root
+
+def get_rotation_matrix(channel, angle_deg):
+    theta = np.deg2rad(angle_deg)
+    if "Xrotation" in channel:
+        return np.array([
+            [1,0,0,0],
+            [0,np.cos(theta),-np.sin(theta),0],
+            [0,np.sin(theta),np.cos(theta),0],
+            [0,0,0,1]
+        ])
+    elif "Yrotation" in channel:
+        return np.array([
+            [np.cos(theta), 0, np.sin(theta), 0],
+            [0, 1, 0, 0],
+            [-np.sin(theta), 0, np.cos(theta), 0],
+            [0, 0, 0, 1]
+        ])
+    elif "Zrotation" in channel:
+        return np.array([
+            [np.cos(theta), -np.sin(theta), 0, 0],
+            [np.sin(theta), np.cos(theta), 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+    else:
+        return np.identity(4)
+
+def translation_matrix(offset):
+    tx, ty, tz = offset
+    return np.array([
+        [1,0,0,tx],
+        [0,1,0,ty],
+        [0,0,1,tz],
+        [0,0,0,1]
+    ])
+
+def compute_forward_kinetics(node, rotations):
+    M = translation_matrix(node.offset)
+    channels = node.channels[-3:]
+    if rotations is not None:
+        for channel, angle in zip(channels, rotations):
+            M = M @ get_rotation_matrix(channel, angle)
+    return M

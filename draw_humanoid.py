@@ -4,7 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
-joint_size = 0.3
+joint_size = 3
 
 from utils import *
 
@@ -16,25 +16,16 @@ def draw_humanoid(root_position, root_joint):
 
 def draw_joint(joint):
     glPushMatrix()
-    glTranslatef(*joint.offset)
 
-    if joint is None:
-        return
+    glMultMatrixf(joint.kinetics.T.flatten())
 
-    if joint.rotation is not None:
-        for channel, angle in zip(joint.channels, joint.rotation):
-            if "Xrotation" in channel:
-                glRotatef(angle, 1, 0, 0)
-            elif "Yrotation" in channel:
-                glRotatef(angle, 0, 1, 0)
-            elif "Zrotation" in channel:
-                glRotatef(angle, 0, 0, 1)
-
-    draw_colored_sphere(joint_size)
+    if joint.name != "joint_Root":
+        draw_colored_sphere(joint_size)
 
     for child in joint.children:
         glPushMatrix()
-        draw_bone(child.offset)
+        if joint.name != "joint_Root":
+            draw_bone(child.offset)
         draw_joint(child)
         glPopMatrix()
     glPopMatrix()
