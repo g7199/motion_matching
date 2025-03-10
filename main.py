@@ -10,6 +10,9 @@ from pyglm import glm
 from functions import bvh_parser, motion_adapter
 from draw_humanoid import draw_humanoid
 from utils import draw_axes, set_lights
+from tkinter import Tk, filedialog
+
+
 
 center = glm.vec3(0, 0, 0)
 eye = glm.vec3(60, 180, 600)
@@ -30,6 +33,7 @@ root = None
 motion_frames = None
 selected_joint = None
 
+loaded_file_path = None
 
 def imgui_joint_tree(joint):
     global selected_joint
@@ -139,7 +143,8 @@ def render():
     draw_humanoid(root_position, root)
 
 def main():
-    global frame_idx, frame_len, root, motion_frames, last_x, last_y, stop
+    global frame_idx, frame_len, root, motion_frames, last_x, last_y, stop, loaded_file_path
+    Tk().withdraw()
     pygame.init()
     size = (800, 600)
     screen = pygame.display.set_mode(size, pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
@@ -196,6 +201,7 @@ def main():
 
         # ImGui 프레임
         imgui.new_frame()
+        imgui.set_next_window_position(10, 10)  # (X, Y)
 
         imgui.begin("Control Panel")
         changed, value = imgui.slider_int("Slider", frame_idx+1, 0, frame_len)
@@ -208,6 +214,26 @@ def main():
         if root:
             imgui_joint_tree(root)
         imgui_joint_control()
+        imgui.end()
+        # BVH_File Loader
+        imgui.set_next_window_position(550, 10, condition=imgui.ONCE)  # (X, Y)
+        imgui.set_next_window_size(200, 100, condition=imgui.ONCE)  # Width, Height
+        imgui.begin("BVH Loader")
+        if imgui.button("Open Folder/Directory"):
+            file_path = filedialog.askopenfilename(
+                title="Select BVH file",
+                filetypes=[("BVH Files", "*.bvh")]
+            )
+            if file_path:
+                loaded_file_path = file_path
+                print("File selected:", file_path)
+                root, motion_frames = bvh_parser(file_path)
+                check_bvh_structure(root, is_root=True)
+                frame_len = len(motion_frames)
+                frame_idx = 0
+
+        if loaded_file_path:
+            imgui.text(f"Loaded: {loaded_file_path.split("/")[-1]}")
         imgui.end()
 
         render()
