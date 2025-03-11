@@ -19,11 +19,13 @@ def draw_joint(joint):
 
     glMultMatrixf(joint.kinetics.T.flatten())
 
-    draw_colored_sphere(joint_size)
+    if joint.name != "joint_Root":
+        draw_colored_sphere(joint_size)
 
     for child in joint.children:
         glPushMatrix()
-        draw_bone(child.offset)
+        if joint.name != "joint_Root":
+            draw_bone(child.offset)
         draw_joint(child)
         glPopMatrix()
     glPopMatrix()

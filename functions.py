@@ -38,6 +38,7 @@ def bvh_parser(file_path):
 
                 if parts[0] in ["ROOT", "JOINT", "End"]:
                     node = Joint(parts[1])
+                    node.parent = cur_node
                     if not root:
                         root = node
                     if cur_node:
@@ -80,17 +81,22 @@ def add_motion(node, motion_frame, idx=[0]):
         return
 
     if node.name != "Site":
-        rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
-        node.kinetics = compute_forward_kinetics(node, rotation)
-        idx[0] += 3
+        if len(node.channels) == 6:
+            idx[0] += 3
+            rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.kinetics = compute_forward_kinetics(node,rotation)
+            idx[0] += 3
+        elif len(node.channels) == 3:
+            rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.kinetics = compute_forward_kinetics(node,rotation)
+            idx[0] += 3
 
     for child in node.children:
         add_motion(child, motion_frame, idx)
 
 def motion_adapter(root, motion_frame):
-    root_position = list(map(float, motion_frame[:3]))
-    motion_frame = motion_frame[3:]
     add_motion(root, motion_frame, idx=[0])
+    root_position = list(map(float, motion_frame[:3]))
 
     return root_position, root
 

@@ -12,8 +12,6 @@ from draw_humanoid import draw_humanoid
 from utils import draw_axes, set_lights
 from tkinter import Tk, filedialog
 
-
-
 center = glm.vec3(0, 0, 0)
 eye = glm.vec3(60, 180, 600)
 upVector = glm.vec3(0, 1, 0)
@@ -32,8 +30,8 @@ frame_len = None
 root = None
 motion_frames = None
 selected_joint = None
-
 loaded_file_path = None
+
 
 def imgui_joint_tree(joint):
     global selected_joint
@@ -215,6 +213,7 @@ def main():
             imgui_joint_tree(root)
         imgui_joint_control()
         imgui.end()
+
         # BVH_File Loader
         imgui.set_next_window_position(550, 10, condition=imgui.ONCE)  # (X, Y)
         imgui.set_next_window_size(200, 100, condition=imgui.ONCE)  # Width, Height
@@ -235,7 +234,6 @@ def main():
         if loaded_file_path:
             imgui.text("Loaded: {}".format(loaded_file_path.split("/")[-1]))
         imgui.end()
-
         render()
 
         imgui.render()
@@ -262,10 +260,13 @@ def check_bvh_structure(joint, is_root=False):
     else:
         if joint.channels:
             if len(joint.channels) != 3:
-                raise ValueError(f"Joint '{joint.name}' must have 3 channels, found {len(joint.channels)}")
-            for channel in joint.channels:
-                if "rotation" not in channel.lower():
-                    raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
+                for channel in joint.channels[3:]:
+                    if "rotation" not in channel.lower():
+                        raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
+            else:
+                for channel in joint.channels:
+                    if "rotation" not in channel.lower():
+                        raise ValueError(f"Joint '{joint.name}' channel must be a rotation channel, found '{channel}'")
 
     for child in joint.children:
         check_bvh_structure(child, is_root=False)
