@@ -1,3 +1,5 @@
 __pycache__/
 bvh
 .idea/
+imgui.ini
+.DS_Store

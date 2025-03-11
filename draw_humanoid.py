@@ -38,6 +38,6 @@ def draw_bone(offset):
     glPushMatrix()
     glTranslatef(*mid)
     glMultMatrixf(np.array(rot_mat, dtype=np.float32).flatten())
-    glScalef(joint_size, abs(glm.l2Norm(offset) - 2 * joint_size) / 2, joint_size)
+    glScalef(joint_size, abs(glm.l2Norm(offset) - 2 * joint_size) / 2, joint_size/3)
     draw_colored_cube(1)
     glPopMatrix()
