@@ -233,7 +233,7 @@ def main():
                 frame_idx = 0
 
         if loaded_file_path:
-            imgui.text(f"Loaded: {loaded_file_path.split("/")[-1]}")
+            imgui.text("Loaded: {}".format(loaded_file_path.split("/")[-1]))
         imgui.end()
 
         render()
