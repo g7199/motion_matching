@@ -7,7 +7,7 @@ class Joint:
         self.children = []
         self.offset = [0,0,0]
         self.kinetics = np.identity(4, dtype=float)
-
+        self.rotation = []
 def bvh_parser(file_path):
     stack = []
     root = None
@@ -84,10 +84,12 @@ def add_motion(node, motion_frame, idx=[0]):
         if len(node.channels) == 6:
             idx[0] += 3
             rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.rotation = rotation
             node.kinetics = compute_forward_kinetics(node,rotation)
             idx[0] += 3
         elif len(node.channels) == 3:
             rotation = list(map(float, motion_frame[idx[0]:idx[0]+3]))
+            node.rotation = rotation
             node.kinetics = compute_forward_kinetics(node,rotation)
             idx[0] += 3
 
