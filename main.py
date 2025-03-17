@@ -7,10 +7,11 @@ from OpenGL.GLU import *
 import imgui
 from imgui.integrations.pygame import PygameRenderer
 from pyglm import glm
-from functions import bvh_parser, motion_adapter
+from functions import bvh_parser, motion_adapter, get_rotation_matrix
 from draw_humanoid import draw_humanoid
 from utils import draw_axes, set_lights
 from tkinter import Tk, filedialog
+import numpy as np
 
 center = glm.vec3(0, 0, 0)
 eye = glm.vec3(60, 180, 600)
@@ -61,6 +62,59 @@ def imgui_joint_control():
             imgui.text(text)
     else:
         imgui.text("No joint selected.")
+
+def define_root_transform(joint):
+    if joint.name in ("Hips","hip"):
+        M = joint.kinetics
+        yaw = extract_y_rotation(M)
+        Rotation_yaw = np.array([
+            [np.cos(yaw),0,np.sin(yaw),0],
+            [0,1,0,0],
+            [-np.sin(yaw),0,np.cos(yaw),0],
+            [0,0,0,1]
+        ], dtype=np.float32)
+
+        Rotation_yaw[0][3] = root_position[0]
+        Rotation_yaw[2][3] = root_position[2]
+
+        return Rotation_yaw
+    else:
+        raise ValueError("Root joint error: joint name is not Hips or hip.")
+
+
+def extract_y_rotation(matrix):
+    forward = np.array([matrix[0, 2], matrix[1, 2], matrix[2, 2]], dtype=np.float32)
+    forward[1] = 0.0
+    norm = np.linalg.norm(forward)
+    if norm > 0:
+        forward /= norm
+    else:
+        forward = np.array([0, 0, 1], dtype=np.float32)
+    # atan2(x, z) 사용: xz 평면에서의 yaw
+    yaw = math.atan2(forward[0], forward[2])
+    return yaw
+
+def draw_T_axes(root_transform, axis_length = 10.0):
+    matrix_np = np.array(root_transform, dtype=np.float32).T.flatten()
+    glPushMatrix()
+    glMultMatrixf(matrix_np)
+    glLineWidth(2.0)
+    glBegin(GL_LINES)
+    # X-axis in red.
+    glColor3f(1, 0, 0)
+    glVertex3f(0, 0, 0)
+    glVertex3f(axis_length, 0, 0)
+    # Y-axis in green.
+    glColor3f(0, 1, 0)
+    glVertex3f(0, 0, 0)
+    glVertex3f(0, axis_length, 0)
+    # Z-axis in blue.
+    glColor3f(0, 0, 1)
+    glVertex3f(0, 0, 0)
+    glVertex3f(0, 0, axis_length)
+
+    glEnd()
+    glPopMatrix()
 
 def update_eye():
     global eye, distance, yaw, pitch, center
@@ -130,7 +184,7 @@ def handle_mouse_wheel(event):
     update_eye()
 
 def render():
-    global root, frame_idx
+    global root, frame_idx, root_position
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
     gluLookAt(eye.x, eye.y, eye.z,
@@ -139,6 +193,7 @@ def render():
     draw_axes()
     root_position, _ = motion_adapter(root, motion_frames[frame_idx])
     draw_humanoid(root_position, root)
+    draw_T_axes(define_root_transform(root), 30)
 
 def main():
     global frame_idx, frame_len, root, motion_frames, last_x, last_y, stop, loaded_file_path
