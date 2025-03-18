@@ -24,11 +24,17 @@ pip install PyOpenGL PyOpenGL_accelerate PyGLM imgui[glfw] pygame
 python main.py bvh/your-file.bvh
 ```
 
+
 ## Project Structure
+![Diagram](BVH_Viewer.drawio.svg)
 ```plaintext
 .
-├── bvh/                # BVH file storage folder
-│   ├── your-file.bvh   # Example BVH file
-├── main.py             # BVH parser script
-├── README.md           # Project documentation
+├── Main.py                # Entry point: initialization, main loop, etc.
+├── BVH_parser.py          # Module for parsing BVH files & adding the virtual root.
+├── Transforms.py          # Transformation utilities: translation, rotation, forward kinetics, extracting yaw, etc.
+├── Rendering.py           # OpenGL rendering routines (draw skeleton, mini-axis, global axes, etc.)
+├── Events.py              # Event handling and camera control code.
+├── UI.py                  # ImGui (or other UI) setup and widgets.
+├──utils.py                # Additional helper functions (logging, error handling, configuration).
+└── README.md              # Project documentation
 ```

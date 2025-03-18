@@ -31,6 +31,12 @@ normals = [
 
 
 def draw_colored_cube(size_x, size_y=-1, size_z=-1):
+    """
+    면을 구분하기 위한 3개의 색상을 texture로 가진 cube를 생성하는 함수입니다.
+    :param size_x: cube의 x길이
+    :param size_y: cube의 y길이
+    :param size_z: cube의 z길이
+    """
     if (size_y < 0): size_y = size_x
     if (size_z < 0): size_z = size_x
     glPushMatrix()
@@ -46,6 +52,10 @@ def draw_colored_cube(size_x, size_y=-1, size_z=-1):
 
 
 def draw_colored_sphere(radius):
+    """
+    Quadric object인 sphere을 생성하기 위한 함수입니다.
+    :param radius: sphere의 크기
+    """
     quadric = gluNewQuadric()  # Quadric object 생성 (http://www.gisdeveloper.co.kr/?p=35)
     glPushMatrix()
     glColor3fv((1.0, 0.0, 0.0))
@@ -55,8 +65,13 @@ def draw_colored_sphere(radius):
 
 
 def draw_axes(grid_size = 500, step = 10):
-    # grid_size를 미리 정의해서 그 길이만큼 격자랑 XYZ axis 그리게 해둠
-    # 그만큼 Clipping distance도 늘렸는데 나중에 이거랑 연동되게 하면 좋을듯
+    """
+    축과 격자를 그리기 위한 함수입니다.
+    grid_size를 미리 정의해서 그 길이만큼 격자랑 XYZ axis 그리게 해두었습니다.
+    축의 길이가 너무 짧아 길게 설정하였는데 그만큼 Clipping distance도 늘렸습니다
+    TODO: CLippind distance랑 연계하기.
+    """
+
     glLineWidth(2.0)
 
     # Draw XYZ axes
@@ -99,6 +114,9 @@ def draw_axes(grid_size = 500, step = 10):
 
 
 def set_lights():
+    """
+    기본 enviroment의 빛을 조절하는 함수입니다.
+    """
     # 조명 설정
     glEnable(GL_LIGHTING)  # 조명 활성화
     glEnable(GL_LIGHT0)  # 기본 조명 활성화
@@ -126,6 +144,12 @@ def set_lights():
 
 
 def rotation_between_vectors(v1, v2):
+    """
+    vector v1과 v2 사이의 회전값을 구하는 함수입니다.
+    :param v1: 벡터 1
+    :param v2: 벡터 2
+    :return: 두 벡터 사이의 회전 행렬
+    """
     v1 = glm.normalize(v1)
     v2 = glm.normalize(v2)
     cos_theta = glm.dot(v1, v2)
@@ -140,6 +164,11 @@ def rotation_between_vectors(v1, v2):
 
 
 def bone_rotation(forward):
+    """
+    Skeleton 구조에서 뼈와 뼈사이의 회전을 구하는 함수입니다.
+    :param forward: 전방벡터값
+    :return: 회전행렬
+    """
     originalDir = glm.vec3(0, 1, 0)
     if glm.length2(glm.cross(originalDir, forward)) < 1e-6:
         if glm.dot(originalDir, forward) < 0:
