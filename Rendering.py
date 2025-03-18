@@ -1,7 +1,7 @@
 from OpenGL.GL import *
 from pyglm import glm
 import numpy as np
-from utils import draw_colored_cube, draw_colored_sphere
+from utils import draw_colored_cube, draw_colored_sphere, bone_rotation, draw_arrow, draw_undercircle
 
 joint_size = 3
 
@@ -39,7 +39,6 @@ def draw_bone(offset):
     :param offset: 뼈 길이를 구하기 위한 값
     """
     mid = [offset[0] / 2.0, offset[1] / 2.0, offset[2] / 2.0]
-    from utils import bone_rotation
     rot_quat = bone_rotation(glm.vec3(*offset))
     rot_mat = glm.mat4_cast(rot_quat)
     glPushMatrix()
@@ -49,7 +48,7 @@ def draw_bone(offset):
     draw_colored_cube(1)
     glPopMatrix()
 
-def draw_virtual_root_axis(virtual_root, rotation, axis_length=10.0):
+def draw_virtual_root_axis(kinetics, circle_radius=10, arrow_length=20):
     """
     root Transform T에서 조그만한 3차원 축을 그리기 위함입니다.
     virtual root의 위치를 받아 rotation만큼 회전하여 그려 pelvis의 회전을 시각적으로 확인할 수 있습니다.
@@ -57,23 +56,10 @@ def draw_virtual_root_axis(virtual_root, rotation, axis_length=10.0):
     :param rotation: 적용할 회전값
     :param axis_length: 축 크기 (기본값 10)
     """
-    pos = virtual_root.offset  # Assumed to be [x, y, z]
     glPushMatrix()
-    glTranslatef(pos[0], pos[1], pos[2])
-    glMultMatrixf(rotation)
-    glLineWidth(2.0)
-    glBegin(GL_LINES)
-    # X-axis in red.
-    glColor3f(1, 0, 0)
-    glVertex3f(0, 0, 0)
-    glVertex3f(axis_length, 0, 0)
-    # Y-axis in green.
-    glColor3f(0, 1, 0)
-    glVertex3f(0, 0, 0)
-    glVertex3f(0, axis_length, 0)
-    # Z-axis in blue.
-    glColor3f(0, 0, 1)
-    glVertex3f(0, 0, 0)
-    glVertex3f(0, 0, axis_length)
-    glEnd()
+    glMultMatrixf(kinetics.T.flatten())
+    draw_arrow(circle_radius, arrow_length)
+    glRotatef(90, 1.0, 0.0, 0.0)
+    glColor3f(1.0, 1.0, 1.0) 
+    draw_undercircle(10)
     glPopMatrix()

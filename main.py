@@ -6,9 +6,10 @@ from OpenGL.GLU import *
 import imgui
 from imgui.integrations.pygame import PygameRenderer
 from pyglm import glm
+import numpy as np
 
 from BVH_Parser import bvh_parser, check_bvh_structure
-from Transforms import motion_adapter, extract_yaw_rotation
+from Transforms import motion_adapter, get_pelvis_virtual, extract_yaw_rotation
 from Rendering import draw_humanoid, draw_virtual_root_axis
 from utils import draw_axes, set_lights
 import Events
@@ -109,12 +110,16 @@ def main():
         draw_axes()
         if state['motion_frames'] and state['root']:
             root_position, _ = motion_adapter(state['root'], state['motion_frames'][state['frame_idx']])
-
+            
             draw_humanoid(root_position, state['root'])
+            
             hip_node = state['root'].children[0]
-            hip_rotation = extract_yaw_rotation(hip_node.kinetics)
-            state['root'].offset = [root_position[0], 0, root_position[2]]
-            draw_virtual_root_axis(state['root'], hip_rotation, axis_length=30.0)
+            hip_kinetics = get_pelvis_virtual(hip_node.kinetics)
+            # global translation을 제거한 kinetics를 생성합니다.
+            local_kinetics = hip_kinetics.copy()
+            local_kinetics = extract_yaw_rotation(local_kinetics, root_position*np.array([1,0,1]))
+            
+            draw_virtual_root_axis(local_kinetics)
 
         imgui.render()
         impl.render(imgui.get_draw_data())

@@ -62,7 +62,7 @@ def compute_forward_kinetics(node, rotations):
             M = M @ get_rotation_matrix(channel, angle)
     return M
 
-def extract_yaw_rotation(kinetics):
+def extract_yaw_rotation(kinetics, offset):
     """
     회전행렬에서 yaw값만을 추출하기 위한 함수입니다.
     XZ평면에 사영된 root Transform T 에 y축 회전을 적용하느넫 사용됩니다.
@@ -81,9 +81,9 @@ def extract_yaw_rotation(kinetics):
     cos_y = np.cos(yaw)
     sin_y = np.sin(yaw)
     rotation_y = np.array([
-        [cos_y, 0, sin_y, 0],
-        [0, 1, 0, 0],
-        [-sin_y, 0, cos_y, 0],
+        [cos_y, 0, sin_y, offset[0]],
+        [0, 1, 0, offset[1]],
+        [-sin_y, 0, cos_y, offset[2]],
         [0, 0, 0, 1]
     ], dtype=float)
     return rotation_y
@@ -140,3 +140,35 @@ def inverse_matrix(T):
     T_inv[:3, :3] = R_inv
     T_inv[:3, 3] = t_inv
     return T_inv
+
+def get_projection(v, onto):
+    onto_norm = onto / np.linalg.norm(onto)
+    proj = np.dot(v, onto_norm) * onto_norm
+    return proj
+
+def lookrotation(v, u):
+    u_hat = u/np.linalg.norm(u)
+    v_hat = v/np.linalg.norm(v)
+
+    vxu = np.cross(u_hat, v_hat)
+    t_hat = vxu/np.linalg.norm(vxu)
+
+    R = np.array([t_hat, np.cross(v_hat, t_hat), v_hat]).T
+    return R
+
+def get_pelvis_virtual(kinetics):
+
+    ap = kinetics[:3, 3]
+    ar = kinetics[:3, :3]
+    upVector = np.array([0,1,0], dtype=float)
+    p = ap - get_projection(ap, upVector)
+    f = ar[:, 2]
+    r = lookrotation(f-get_projection(f, upVector), upVector)
+    ap_transformed = r.T @ (ap - p)
+    ar_transformed = r.T
+
+    kinetics = np.eye(4)
+    kinetics[:3, :3] = ar_transformed
+    kinetics[:3, 3] = ap_transformed
+    
+    return kinetics

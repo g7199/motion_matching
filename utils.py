@@ -2,6 +2,7 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
+import numpy as np
 from pyglm import glm
 
 colors = [
@@ -178,3 +179,39 @@ def bone_rotation(forward):
     else:
         rot = rotation_between_vectors(forward, originalDir)
     return rot
+
+def draw_undercircle(radius=1.0):
+    quadric = gluNewQuadric()
+    gluQuadricDrawStyle(quadric, GLU_FILL)  # 채워진 스타일로 설정
+    gluDisk(quadric, 0.0, radius, 32, 1)
+    gluDeleteQuadric(quadric)
+
+def draw_arrow(circle_radius, arrow_length):
+
+    R = np.eye(3)
+    forward = R @ np.array([0,0,-1])
+    forward[1] = 0
+
+    dir = forward / (np.linalg.norm(forward) + 1e-20)
+    tail = -dir * circle_radius
+    head = tail - dir * arrow_length
+    
+    glColor3f(1.0, 0.0, 0.0)
+    
+    glBegin(GL_LINES)
+    glVertex3f(tail[0], 0, tail[2])
+    glVertex3f(head[0], 0, head[2])
+    glEnd()
+
+    perp = np.array([-dir[2], 0, dir[0]])
+    arrow_head_width = arrow_length * 0.3  # 화살촉 너비 (조정 가능)
+    # 화살촉의 base 위치 (라인의 head에서 약간 뒤쪽)
+    arrow_head_base = head + dir * (arrow_length * 0.5)
+    left = arrow_head_base + perp * arrow_head_width
+    right = arrow_head_base - perp * arrow_head_width
+
+    glBegin(GL_TRIANGLES)
+    glVertex3f(head[0], 0, head[2])
+    glVertex3f(left[0], 0, left[2])
+    glVertex3f(right[0], 0, right[2])
+    glEnd()
