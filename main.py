@@ -114,10 +114,12 @@ def main():
             draw_humanoid(root_position, state['root'])
             
             hip_node = state['root'].children[0]
-            hip_kinetics = get_pelvis_virtual(hip_node.kinetics)
-            # global translation을 제거한 kinetics를 생성합니다.
-            local_kinetics = hip_kinetics.copy()
-            local_kinetics = extract_yaw_rotation(local_kinetics, root_position*np.array([1,0,1]))
+            local_kinetics = get_pelvis_virtual(hip_node.kinetics)
+    
+            global_kinetics = hip_node.kinetics
+            global_virtual = global_kinetics @ local_kinetics 
+
+            local_kinetics = extract_yaw_rotation(global_virtual, root_position*np.array([1,0,1]))
             
             draw_virtual_root_axis(local_kinetics)
 
@@ -142,6 +144,5 @@ if __name__ == "__main__":
 
     state['root'] = root
     state['motion_frames'] = motion_frames
-
 
     main()

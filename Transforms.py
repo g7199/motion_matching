@@ -64,27 +64,25 @@ def compute_forward_kinetics(node, rotations):
 
 def extract_yaw_rotation(kinetics, offset):
     """
-    회전행렬에서 yaw값만을 추출하기 위한 함수입니다.
-    XZ평면에 사영된 root Transform T 에 y축 회전을 적용하느넫 사용됩니다.
-    :param kinetics: 적용되고 있는 회전
-    :return: yaw값만을 담고있는 4x4 행렬
+    회전행렬에서 yaw값만을 추출하여, offset을 적용한 4x4 행렬을 반환합니다.
+    기존 방식 대신 회전행렬의 특정 요소를 이용해 yaw를 안정적으로 계산합니다.
+    
+    :param kinetics: 4x4 변환 행렬 (회전 포함)
+    :param offset: 3차원 offset 벡터 (예: [x, y, z])
+    :return: yaw 회전만을 적용한 4x4 행렬
     """
-    forward = kinetics[:3, 2].copy()
-    forward[1] = 0  # Project onto XZ plane.
-    norm = np.linalg.norm(forward)
-    if norm != 0:
-        forward /= norm
-    else:
-        forward = np.array([0, 0, 1])
-
-    yaw = -np.arctan2(forward[0], forward[2])
+    # 회전 행렬에서 yaw를 직접 추출 (현재 좌표계에 맞게 수정 필요)
+    R_mat = kinetics[:3, :3]
+    # 예: R_mat[0,2]와 R_mat[2,2]를 사용 (좌표계에 따라 부호나 순서가 달라질 수 있음)
+    yaw = np.arctan2(R_mat[0, 2], R_mat[2, 2])
+    
     cos_y = np.cos(yaw)
     sin_y = np.sin(yaw)
     rotation_y = np.array([
         [cos_y, 0, sin_y, offset[0]],
-        [0, 1, 0, offset[1]],
-        [-sin_y, 0, cos_y, offset[2]],
-        [0, 0, 0, 1]
+        [0,     1, 0,     offset[1]],
+        [-sin_y,0, cos_y, offset[2]],
+        [0,     0, 0,     1]
     ], dtype=float)
     return rotation_y
 
@@ -165,7 +163,7 @@ def get_pelvis_virtual(kinetics):
     f = ar[:, 2]
     r = lookrotation(f-get_projection(f, upVector), upVector)
     ap_transformed = r.T @ (ap - p)
-    ar_transformed = r.T
+    ar_transformed = r.T @ ar
 
     kinetics = np.eye(4)
     kinetics[:3, :3] = ar_transformed
