@@ -62,7 +62,7 @@ def compute_forward_kinetics(node, rotations):
             M = M @ get_rotation_matrix(channel, angle)
     return M
 
-def extract_yaw_rotation(kinetics, offset):
+def extract_yaw_rotation(kinetics):
     """
     회전행렬에서 yaw값만을 추출하여, offset을 적용한 4x4 행렬을 반환합니다.
     기존 방식 대신 회전행렬의 특정 요소를 이용해 yaw를 안정적으로 계산합니다.
@@ -73,6 +73,7 @@ def extract_yaw_rotation(kinetics, offset):
     """
     # 회전 행렬에서 yaw를 직접 추출 (현재 좌표계에 맞게 수정 필요)
     R_mat = kinetics[:3, :3]
+    offset = kinetics[:3, 3]
     # 예: R_mat[0,2]와 R_mat[2,2]를 사용 (좌표계에 따라 부호나 순서가 달라질 수 있음)
     yaw = np.arctan2(R_mat[0, 2], R_mat[2, 2])
     
@@ -144,15 +145,42 @@ def get_projection(v, onto):
     proj = np.dot(v, onto_norm) * onto_norm
     return proj
 
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
 def lookrotation(v, u):
-    u_hat = u/np.linalg.norm(u)
-    v_hat = v/np.linalg.norm(v)
+    """
+    기존 lookrotation의 cross 기반 구현에
+    회전행렬 -> 쿼터니언 변환 후 w<0이면 뒤집는 과정을 추가.
+    """
+    # 1) 입력 벡터 정규화
+    u_hat = u / np.linalg.norm(u)
+    v_hat = v / np.linalg.norm(v)
 
+    # 2) 교차곱으로 right축(t_hat) 구하고, up축 재계산
     vxu = np.cross(u_hat, v_hat)
-    t_hat = vxu/np.linalg.norm(vxu)
+    t_hat = vxu / np.linalg.norm(vxu)
+    # forward축 = v_hat
+    # up축      = forward x right = v_hat x t_hat
 
-    R = np.array([t_hat, np.cross(v_hat, t_hat), v_hat]).T
-    return R
+    # 3) 열방향(column) = [right, up, forward]
+    rot_mat = np.array([
+        t_hat,                     # right
+        np.cross(v_hat, t_hat),   # up
+        v_hat                     # forward
+    ]).T  # shape (3,3)
+
+    # 4) 쿼터니언 변환
+    rot_q = R.from_matrix(rot_mat).as_quat()  # [x, y, z, w]
+
+    # 5) w < 0이면 부호 뒤집기
+    if rot_q[3] < 0:
+        rot_q = -rot_q
+
+    # 6) 보정된 쿼터니언을 다시 회전행렬로
+    rot_mat_fixed = R.from_quat(rot_q).as_matrix()
+    return rot_mat_fixed
+
 
 def get_pelvis_virtual(kinetics):
 
@@ -165,8 +193,49 @@ def get_pelvis_virtual(kinetics):
     ap_transformed = r.T @ (ap - p)
     ar_transformed = r.T @ ar
 
-    kinetics = np.eye(4)
-    kinetics[:3, :3] = ar_transformed
-    kinetics[:3, 3] = ap_transformed
+    next_kinetics = np.eye(4)
+    next_kinetics[:3, :3] = ar_transformed
+    next_kinetics[:3, 3] = ap_transformed
     
-    return kinetics
+    return next_kinetics
+
+def extract_xz_plane(kinetics):
+    R_mat = kinetics[:3, :3]
+    offset = kinetics[:3, 3]
+    # 예: R_mat[0,2]와 R_mat[2,2]를 사용 (좌표계에 따라 부호나 순서가 달라질 수 있음)
+    yaw = np.arctan2(R_mat[0, 2], R_mat[2, 2])
+    
+    cos_y = np.cos(yaw)
+    sin_y = np.sin(yaw)
+    rotation_y = np.array([
+        [cos_y, 0, sin_y, offset[0]],
+        [0,     1, 0,     0        ],
+        [-sin_y,0, cos_y, offset[2]],
+        [0,     0, 0,     1        ]
+    ], dtype=float)
+    return rotation_y
+
+def remove_yaw_from_matrix(mat4):
+    # 3x3 회전행렬 분리
+    R_mat = mat4[:3, :3]
+
+    # yaw 추출 (현재 +Z가 전방이라고 가정)
+    yaw = np.arctan2(R_mat[0, 2], R_mat[2, 2])
+    # 그 역회전
+    inv_yaw = -yaw
+
+    # Y축 회전행렬
+    cy = np.cos(inv_yaw)
+    sy = np.sin(inv_yaw)
+    R_yaw_inv = np.array([
+        [cy,  0, sy],
+        [ 0,  1,  0],
+        [-sy, 0, cy],
+    ], dtype=float)
+
+    # mat4 복사
+    new_mat = mat4.copy()
+    # 새 회전행렬 = (R_yaw_inv) * (원래 R_mat)
+    new_rot = R_yaw_inv @ R_mat
+    new_mat[:3, :3] = new_rot
+    return new_mat

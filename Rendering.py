@@ -2,6 +2,7 @@ from OpenGL.GL import *
 from pyglm import glm
 import numpy as np
 from utils import draw_colored_cube, draw_colored_sphere, bone_rotation, draw_arrow, draw_undercircle
+from BVH_Parser import print_joint_structure
 
 joint_size = 3
 
@@ -12,8 +13,11 @@ def draw_humanoid(root_position, root_joint):
     :param root_joint: 그릴 joint
     """
     glPushMatrix()
-    glTranslatef(*root_position)
-    draw_joint(root_joint)
+    #glTranslatef(*root_position)
+    glMultMatrixf(root_joint.kinetics.T.flatten())
+    draw_joint(root_joint.children[0])
+    #draw_joint(root_joint)
+    
     glPopMatrix()
 
 def draw_joint(joint):

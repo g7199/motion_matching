@@ -112,3 +112,8 @@ def check_bvh_structure(joint, is_root=False):
     for child in joint.children:
         check_bvh_structure(child, is_root=False)
 
+def print_joint_structure(joint, depth=0):
+    indent = "  " * depth
+    print(f"{indent}{joint.name}")
+    for child in joint.children:
+        print_joint_structure(child, depth + 1)
