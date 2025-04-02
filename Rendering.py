@@ -2,39 +2,42 @@ from OpenGL.GL import *
 from pyglm import glm
 import numpy as np
 from utils import draw_colored_cube, draw_colored_sphere, bone_rotation, draw_arrow, draw_undercircle
-from BVH_Parser import print_joint_structure
 
 joint_size = 3
 
-def draw_humanoid(root_position, root_joint):
+def glm_mat4_to_glf(m: glm.mat4) -> np.ndarray:
+    return np.array(m.to_list(), dtype=np.float32).flatten()
+
+def draw_humanoid(root_joint):
     """
     Skeleton을 그리기 위한 함수입니다.
-    :param root_position: skeleton을 그리기 시작할 position
-    :param root_joint: 그릴 joint
+    :param root_joint: 그릴 joint (전역 kinematics가 이미 계산되어 있음)
     """
     glPushMatrix()
-    #glTranslatef(*root_position)
-    glMultMatrixf(root_joint.kinetics.T.flatten())
+    glMultMatrixf(glm_mat4_to_glf(root_joint.kinematics))
+    # root_joint.kinematics를 draw_joint 내에서 적용하므로 여기서는 단순히 재귀 호출합니다.
     draw_joint(root_joint.children[0])
-    #draw_joint(root_joint)
-    
     glPopMatrix()
 
 def draw_joint(joint):
     """
     Joint를 그리기 위한 함수입니다.
-    만약 joint면 관절을 표현하는 sphere를 그리고 아니라면 뼈대를 그립니다.
+    전역 좌표계의 kinematics를 그대로 적용하고, 관절이면 sphere, 아니라면 뼈대를 그립니다.
     """
     glPushMatrix()
-    glMultMatrixf(joint.kinetics.T.flatten())
+    # 이미 전역 변환으로 계산된 joint.kinematics를 적용
+    glMultMatrixf(glm_mat4_to_glf(joint.kinematics))
+    
     if joint.name != "joint_Root":
         draw_colored_sphere(joint_size)
+    
     for child in joint.children:
-        glPushMatrix()
+        # 부모의 local 좌표계에서 뼈를 먼저 그립니다.
         if joint.name != "joint_Root":
             draw_bone(child.offset)
+        # 자식 joint는 draw_joint 내부에서 각각 glPush/Pop하여 전역 변환을 적용
         draw_joint(child)
-        glPopMatrix()
+    
     glPopMatrix()
 
 def draw_bone(offset):
@@ -48,22 +51,19 @@ def draw_bone(offset):
     glPushMatrix()
     glTranslatef(*mid)
     glMultMatrixf(np.array(rot_mat, dtype=np.float32).flatten())
-    glScalef(joint_size, abs(glm.l2Norm(offset) - 2 * joint_size) / 2, joint_size/3)
+    glScalef(joint_size, abs(glm.length(glm.vec3(*offset)) - 2 * joint_size) / 2, joint_size / 3)
     draw_colored_cube(1)
     glPopMatrix()
 
-def draw_virtual_root_axis(kinetics, circle_radius=10, arrow_length=20):
+def draw_virtual_root_axis(kinematics, circle_radius=10, arrow_length=20):
     """
-    root Transform T에서 조그만한 3차원 축을 그리기 위함입니다.
-    virtual root의 위치를 받아 rotation만큼 회전하여 그려 pelvis의 회전을 시각적으로 확인할 수 있습니다.
-    :param virtual_root: 축을 그릴 root
-    :param rotation: 적용할 회전값
-    :param axis_length: 축 크기 (기본값 10)
+    root Transform에서 조그만한 3차원 축을 그리기 위함입니다.
+    virtual root의 위치를 받아 회전만큼 회전하여 pelvis의 회전을 시각적으로 확인합니다.
     """
     glPushMatrix()
-    glMultMatrixf(kinetics.T.flatten())
+    glMultMatrixf(glm_mat4_to_glf(kinematics))
     draw_arrow(circle_radius, arrow_length)
     glRotatef(90, 1.0, 0.0, 0.0)
-    glColor3f(1.0, 1.0, 1.0) 
+    glColor3f(1.0, 1.0, 1.0)
     draw_undercircle(10)
     glPopMatrix()

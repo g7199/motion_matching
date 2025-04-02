@@ -1,4 +1,4 @@
-# BVH Parser
+# BVH Parser with Motion Blending
 
 ## Installation & Usage
 
@@ -21,7 +21,7 @@ pip install PyOpenGL PyOpenGL_accelerate PyGLM imgui[glfw] pygame
 
 ### 4️⃣ Run the Script
 ```bash
-python main.py bvh/your-file.bvh
+python main.py bvh/your-file1.bvh bvh/your-file2.bvh
 ```
 
 
@@ -35,6 +35,7 @@ python main.py bvh/your-file.bvh
 ├── Rendering.py           # OpenGL rendering routines (draw skeleton, mini-axis, global axes, etc.)
 ├── Events.py              # Event handling and camera control code.
 ├── UI.py                  # ImGui (or other UI) setup and widgets.
-├──utils.py                # Additional helper functions (logging, error handling, configuration).
+├── utils.py               # Additional helper functions (logging, error handling, configuration).
+├── utils.py               # Interpolation methods
 └── README.md              # Project documentation
 ```
