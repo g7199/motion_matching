@@ -1,5 +1,5 @@
 from pyglm import glm
-from virtual_transforms import get_pelvis_virtual
+from virtual_transforms import get_pelvis_virtual, get_pelvis_virtual_safe
 import math
 import numpy as np
 
@@ -112,7 +112,7 @@ class Motion:
             ap = frame.joint_positions.get(hip_name, glm.vec3(0))
             ar = frame.joint_rotations[hip_name]
 
-            ap_local, ar_local = get_pelvis_virtual(ap, ar)
+            ap_local, ar_local = get_pelvis_virtual_safe(ap, ar)
             ap_global = ap - ap_local
             ar_global = ar * glm.conjugate(ar_local)
 

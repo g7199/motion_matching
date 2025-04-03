@@ -1,4 +1,5 @@
-import argparse
+import tkinter as tk
+tk.Tk().withdraw()
 import math
 import pygame
 from OpenGL.GL import *
@@ -6,11 +7,10 @@ from OpenGL.GLU import *
 import imgui
 from imgui.integrations.pygame import PygameRenderer
 from pyglm import glm
-import numpy as np
 
-from bvh_controller import parse_bvh, get_preorder_joint_list, connect
+from bvh_controller import parse_bvh, get_preorder_joint_list
 from Rendering import draw_humanoid, draw_virtual_root_axis
-from utils import draw_axes, set_lights
+from utils import draw_axes, set_lights, random_color
 from virtual_transforms import extract_xz_plane
 import Events
 import UI
@@ -27,26 +27,26 @@ state = {
     'is_rotating': False,
     'is_translating': False,
     'stop': False,
-    'frame_idx': 0,
-    'frame_len': None,
-    'root': None,
-    'motion': None,
-    'loaded_file_path': None
+    # motions: 파일 로더를 통해 추가된 여러 BVH 모션 정보 목록
+    # 각 항목은 'name', 'root', 'motion', 'frame_len', 'visible', 'frame_idx'를 포함합니다.
+    'motions': [],
+    # 파일 다이얼로그 호출 플래그 (파일 로더 창에서 사용)
+    'open_file_dialog': False
 }
 
 def resize(width, height):
-    glViewport(0, 0, width, height)
+    glViewport(0, 0, width - 300, height - 200)  # side panel과 control panel만큼 영역 축소
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(45.0, width / height, 0.1, 5000.0)
+    gluPerspective(45.0, (width - 300) / (height - 200), 0.1, 5000.0)
     glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
+
 
 def main():
     pygame.init()
     size = (800, 600)
     screen = pygame.display.set_mode(size, pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
-    pygame.display.set_caption("BVH Viewer with ImGui Control Panel")
+    pygame.display.set_caption("BVH Viewer")
     glEnable(GL_DEPTH_TEST)
     set_lights()
     resize(*size)
@@ -55,9 +55,6 @@ def main():
     impl = PygameRenderer()
 
     clock = pygame.time.Clock()
-    previous_time = pygame.time.get_ticks() / 1000.0
-    frame_duration = 1 / 60.0
-
     running = True
     while running:
         for event in pygame.event.get():
@@ -66,75 +63,95 @@ def main():
                 continue
             impl.process_event(event)
             io = imgui.get_io()
-
-            if event.type == pygame.MOUSEWHEEL:
-                if not io.want_capture_mouse:
-                    Events.handle_mouse_wheel(event, state)
-            if event.type == pygame.MOUSEMOTION:
-                if not io.want_capture_mouse:
-                    Events.handle_mouse_motion(event, state)
-            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
-                if not io.want_capture_mouse:
-                    Events.handle_mouse_button(event, state)
+            if event.type == pygame.MOUSEWHEEL and not io.want_capture_mouse:
+                Events.handle_mouse_wheel(event, state)
+            if event.type == pygame.MOUSEMOTION and not io.want_capture_mouse:
+                Events.handle_mouse_motion(event, state)
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP) and not io.want_capture_mouse:
+                Events.handle_mouse_button(event, state)
             if event.type == pygame.VIDEORESIZE:
                 size = event.size
                 screen = pygame.display.set_mode(size, pygame.DOUBLEBUF | pygame.OPENGL | pygame.RESIZABLE)
-                resize(*size)
 
-        io.display_size = pygame.display.get_surface().get_size()
-        current_time = pygame.time.get_ticks() / 1000.0
-        delta_time = current_time - previous_time
+        # 매 프레임 사이즈 갱신
+        width, height = size[0], size[1]
+        side_width = int(width * 0.25)
+        bottom_height = int(height * 0.25)
 
-        imgui.new_frame()
-        UI.draw_control_panel(state)
-        UI.draw_file_loader(state)
-
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        # --- GL viewport와 projection 설정 (매 프레임 한번만 설정) ---
+        glViewport(0, bottom_height, width - side_width, height - bottom_height)
+        glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
+        gluPerspective(45.0, (width - side_width) / (height - bottom_height), 0.1, 5000.0)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+        # --- GL 렌더링 (반드시 UI 이전) ---
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         gluLookAt(state['eye'].x, state['eye'].y, state['eye'].z,
                   state['center'].x, state['center'].y, state['center'].z,
                   state['upVector'].x, state['upVector'].y, state['upVector'].z)
         draw_axes()
 
-        if state['motion'] and state['root']:
-            frame_idx = state['frame_idx'] % state['frame_len']
-            state['motion'].apply_to_skeleton(frame_idx, state['root'])
+        if state.get('motions'):
+            for motion_entry in state['motions']:
+                if motion_entry.get('visible', True):
+                    if not state['stop']:
+                        motion_entry['frame_idx'] = (motion_entry['frame_idx'] + 1) % motion_entry['frame_len']
+                    frame_idx = motion_entry['frame_idx']
+                    motion_entry['motion'].apply_to_skeleton(frame_idx, motion_entry['root'])
+                    draw_humanoid(motion_entry['root'], motion_entry['color'])
+                    if motion_entry['root'].children:
+                        draw_virtual_root_axis(
+                            extract_xz_plane(
+                                motion_entry['root'].kinematics *
+                                motion_entry['root'].children[0].kinematics
+                            ), motion_entry['color']
+                        )
 
-            draw_humanoid(state['root'])
-            draw_virtual_root_axis(extract_xz_plane(state['root'].kinematics * state['root'].children[0].kinematics))
+        # --- ImGui 렌더링 영역 ---
+        io.display_size = width, height
+        imgui.new_frame()
+        viewport = imgui.get_main_viewport()
+
+        # UI 호출 (한 번만 호출)
+        UI.draw_control_panel(state, viewport)
+        UI.draw_side_panel(state, viewport)
 
         imgui.render()
         impl.render(imgui.get_draw_data())
+
         pygame.display.flip()
         clock.tick(60)
 
-        if not state['stop'] and state['motion']:
-            state['frame_idx'] += 1
-            previous_time = current_time
+        # --- 파일 다이얼로그 처리 ---
+        if state.get('open_file_dialog'):
+            from tkinter import filedialog
+            file_path = filedialog.askopenfilename(
+                title="Select BVH file",
+                filetypes=[("BVH Files", "*.bvh")]
+            )
+            if file_path:
+                root, motion = parse_bvh(file_path)
+                joint_order = get_preorder_joint_list(root)
+                motion.build_quaternion_frames(joint_order)
+                virtual_root = motion.apply_virtual(root)
+                new_entry = {
+                    'name': file_path.split("/")[-1],
+                    'root': virtual_root,
+                    'motion': motion,
+                    'frame_len': motion.frames,
+                    'visible': True,
+                    'frame_idx': 0,
+                    'color': random_color()
+                }
+                state['motions'].append(new_entry)
+                print("File loaded:", file_path)
+            state['open_file_dialog'] = False
 
     impl.shutdown()
     pygame.quit()
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("file_path")
-    parser.add_argument("file_path2")
-    args = parser.parse_args()
-
-    root, motion = parse_bvh(args.file_path)
-    joint_order = get_preorder_joint_list(root)
-    motion.build_quaternion_frames(joint_order)
-    vr = motion.apply_virtual(root)
-
-    next_root, next_motion = parse_bvh(args.file_path2)
-    joint_order = get_preorder_joint_list(next_root)
-    next_motion.build_quaternion_frames(joint_order)
-    next_vr = next_motion.apply_virtual(next_root)
-
-    new_motion = connect(motion[:-200], next_motion[200:])
-
-    state['root'] = vr
-    state['motion'] = new_motion
-    state['frame_len'] = new_motion.frames
-
     main()
