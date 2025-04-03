@@ -38,3 +38,6 @@ python main.py bvh/your-file1.bvh bvh/your-file2.bvh
 ├── utils.py               # Additional helper functions (logging, error handling, configuration).
 └── README.md              # Project documentation
 ```
+
+## Sample Images
+![Sample](sample_img.png)
