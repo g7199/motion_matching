@@ -1,4 +1,4 @@
-# BVH Parser with Motion Blending
+# Motion Matching
 
 ## Installation & Usage
 
@@ -21,13 +21,8 @@ pip install PyOpenGL PyOpenGL_accelerate PyGLM imgui[glfw] pygame
 
 ### 4️⃣ Run the Script
 ```bash
-python main.py bvh/your-file1.bvh bvh/your-file2.bvh
+python main.py
 ```
-
-
-## Project Structure
-![Diagram](BVH_Viewer.drawio.svg)
-```plaintext
 .
 ├── Main.py                # Entry point: initialization, main loop, etc.
 ├── bvh_controller.py      # Module for parsing BVH files & adding the virtual root.
@@ -38,6 +33,3 @@ python main.py bvh/your-file1.bvh bvh/your-file2.bvh
 ├── utils.py               # Additional helper functions (logging, error handling, configuration).
 └── README.md              # Project documentation
 ```
-
-## Sample Images
-![Sample](sample_img.png)
