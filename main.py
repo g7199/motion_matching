@@ -14,6 +14,7 @@ from utils import draw_axes, set_lights, random_color
 from virtual_transforms import extract_xz_plane
 import Events
 import UI
+from feature_extractor import MotionKDTree
 
 state = {
     'center': glm.vec3(0, 0, 0),
@@ -40,6 +41,25 @@ def resize(width, height):
     glLoadIdentity()
     gluPerspective(45.0, (width - 300) / (height - 200), 0.1, 5000.0)
     glMatrixMode(GL_MODELVIEW)
+
+def init_motion(file_path):
+    root, motion = parse_bvh(file_path)
+    joint_order = get_preorder_joint_list(root)
+    motion.build_quaternion_frames(joint_order)
+    motion.apply_velocity_feature(root)
+    virtual_root = motion.apply_virtual(root)
+    motion.apply_future_feature()
+    new_entry = {
+        'name': file_path.split("/")[-1],
+        'root': virtual_root,
+        'motion': motion,
+        'frame_len': motion.frames,
+        'visible': True,
+        'frame_idx': 1,
+        'color': random_color()
+    }
+    state['motions'].append(new_entry)
+    print("File loaded:", file_path)
 
 
 def main():
@@ -129,21 +149,7 @@ def main():
                 filetypes=[("BVH Files", "*.bvh")]
             )
             if file_path:
-                root, motion = parse_bvh(file_path)
-                joint_order = get_preorder_joint_list(root)
-                motion.build_quaternion_frames(joint_order)
-                virtual_root = motion.apply_virtual(root)
-                new_entry = {
-                    'name': file_path.split("/")[-1],
-                    'root': virtual_root,
-                    'motion': motion,
-                    'frame_len': motion.frames,
-                    'visible': True,
-                    'frame_idx': 1,
-                    'color': random_color()
-                }
-                state['motions'].append(new_entry)
-                print("File loaded:", file_path)
+                init_motion(file_path)
             state['open_file_dialog'] = False
 
     impl.shutdown()
@@ -151,22 +157,11 @@ def main():
 
 
 if __name__ == "__main__":
-    file_path = "bvh/data/002/02_01.bvh"
-    root, motion = parse_bvh(file_path)
-    joint_order = get_preorder_joint_list(root)
-    motion.build_quaternion_frames(joint_order)
-    motion.apply_velocity_feature(root)
-    virtual_root = motion.apply_virtual(root)
-    motion.apply_future_feature()
-    new_entry = {
-        'name': file_path.split("/")[-1],
-        'root': virtual_root,
-        'motion': motion,
-        'frame_len': motion.frames,
-        'visible': True,
-        'frame_idx': 0,
-        'color': random_color()
-    }
-    state['motions'].append(new_entry)
+
+    file_path = "bvh/data/002/02_08.bvh"
+    root_path = './bvh/data/002' 
+
+    init_motion(file_path)
+    tree = MotionKDTree(root_path)
 
     main()

@@ -74,7 +74,7 @@ class Motion:
             if idx:
                 feature_frame = FeatureFrame()
                 if idx == 1:
-                    feature_frame.velocity[root.name] = 0
+                    feature_frame.velocity[root.name] = glm.vec3(0,0,0)
                 else:
                     feature_frame.velocity[root.name] = (frame.joint_positions[root.name] - self.quaternion_frames[idx-1].joint_positions[root.name])
 
@@ -92,7 +92,7 @@ class Motion:
 
                     if idx == 1:
                         feature_frame.site_positions[chain[-1].name] = pos
-                        feature_frame.velocity[chain[-1].name] = 0
+                        feature_frame.velocity[chain[-1].name] = glm.vec3(0,0,0)
 
                     else:
                         feature_frame.site_positions[chain[-1].name] = pos
@@ -367,5 +367,4 @@ def get_joint_chains_from_root(root):
                 dfs(child, path)
 
     dfs(root, [])
-    print(leaf_chains)
     return leaf_chains
