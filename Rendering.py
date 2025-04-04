@@ -1,10 +1,9 @@
 from OpenGL.GL import *
 from pyglm import glm
 import numpy as np
-from utils import draw_colored_cube, draw_colored_sphere, bone_rotation, draw_arrow, draw_undercircle
+from utils import draw_colored_cube, draw_colored_sphere, bone_rotation, draw_arrow, draw_undercircle, draw_arrow_from_direction
 
-joint_size = 3
-
+joint_size = 0.8
 
 #OpenGL_accelerate 사용하면 numpy로 변환해줘야함.
 def glm_mat4_to_glf(m: glm.mat4) -> np.ndarray:
@@ -56,7 +55,7 @@ def draw_bone(offset, color):
     draw_colored_cube(1, color=color)
     glPopMatrix()
 
-def draw_virtual_root_axis(kinematics, color, circle_radius=10, arrow_length=20):
+def draw_virtual_root_axis(kinematics, color, circle_radius=2, arrow_length=4):
     """
     root Transform에서 조그만한 3차원 축을 그리기 위함입니다.
     virtual root의 위치를 받아 회전만큼 회전하여 pelvis의 회전을 시각적으로 확인합니다.
@@ -66,5 +65,23 @@ def draw_virtual_root_axis(kinematics, color, circle_radius=10, arrow_length=20)
     draw_arrow(circle_radius, arrow_length, color)
     glRotatef(90, 1.0, 0.0, 0.0)
     glColor3f(1.0, 1.0, 1.0)
-    draw_undercircle(10)
+    draw_undercircle(circle_radius)
     glPopMatrix()
+
+def draw_matching_features(root_joint, frame, circle_radius = 2):
+    if frame is not None:
+        glPushMatrix()
+        glMultMatrixf(glm_mat4_to_glf(root_joint.kinematics))
+
+        for pos, rot in zip(frame.future_position, frame.future_orientation):
+            glPushMatrix()
+            glTranslatef(pos.x, pos.y, pos.z)
+
+            draw_arrow_from_direction(rot)
+            glRotatef(90, 1.0, 0.0, 0.0)
+            # 3. 해당 위치에 구(점) 그리기
+            glColor3f(0.0, 1.0, 0.0)  # 초록색 점
+            draw_undercircle(circle_radius)
+
+            glPopMatrix()
+        glPopMatrix()

@@ -24,18 +24,22 @@ class Joint:
         child_joint.parent = self
         self.children.append(child_joint)
 
-
 class VirtualRootJoint(Joint):
     def __init__(self, root):
         super().__init__("VirtualRoot", [0, 0, 0], ['Xposition', 'Yposition', 'Zposition', 'Zrotation', 'Yrotation', 'Xrotation'])
         self.add_child(root)
-
 
 class MotionFrame:
     def __init__(self):
         self.joint_rotations = {}
         self.joint_positions = {}
 
+class FeatureFrame:
+    def __init__(self):
+        self.velocity = {}
+        self.site_positions = {}
+        self.future_position = []
+        self.future_orientation = []
 
 class Motion:
     def __init__(self, frames, frame_time):
@@ -43,6 +47,7 @@ class Motion:
         self.frame_time = frame_time
         self.motion_data = []
         self.quaternion_frames = []
+        self.feature_frames = [None]
 
     def get_frames(self):
         return self.frames
@@ -61,8 +66,73 @@ class Motion:
     def add_frame_data(self, frame_data):
         self.motion_data.append(frame_data)
 
+    #virtual 이전 적용
+    def apply_velocity_feature(self, root):
+        joint_chains = get_joint_chains_from_root(root)
+
+        for idx, frame in enumerate(self.quaternion_frames):
+            if idx:
+                feature_frame = FeatureFrame()
+                if idx == 1:
+                    feature_frame.velocity[root.name] = 0
+                else:
+                    feature_frame.velocity[root.name] = (frame.joint_positions[root.name] - self.quaternion_frames[idx-1].joint_positions[root.name])
+
+                for chain in joint_chains:
+                    pos = frame.joint_positions[root.name]
+                    rot = frame.joint_rotations[root.name]
+
+                    for joint in chain[1:]:
+                        offset = joint.offset
+                        q_local = frame.joint_rotations[joint.name]
+
+                        offset_rotated = rot * offset
+                        pos = pos + offset_rotated
+                        rot = rot * q_local
+
+                    if idx == 1:
+                        feature_frame.site_positions[chain[-1].name] = pos
+                        feature_frame.velocity[chain[-1].name] = 0
+
+                    else:
+                        feature_frame.site_positions[chain[-1].name] = pos
+                        feature_frame.velocity[chain[-1].name] = (pos - self.feature_frames[idx-1].site_positions[chain[-1].name])
+                
+                self.feature_frames.append(feature_frame)
+
+    #virtual 이후 적용
+    def apply_future_feature(self):
+        fw = glm.vec3(0, 0, 1)
+        num_frames = len(self.quaternion_frames)
+
+        for idx, frame in enumerate(self.quaternion_frames):
+            if idx == 0:
+                continue
+
+            feature_frame = self.feature_frames[idx]
+            current_pos = frame.joint_positions["VirtualRoot"]
+            current_rot = frame.joint_rotations["VirtualRoot"]
+
+            if idx <= num_frames - 60 - 1:
+                for k in [20, 40, 60]:
+                    future_frame = self.quaternion_frames[idx + k]
+                    future_pos = future_frame.joint_positions["VirtualRoot"]
+                    future_rot = future_frame.joint_rotations["VirtualRoot"]
+
+                    rel_pos = glm.conjugate(current_rot) * (future_pos - current_pos)
+                    rel_rot = glm.conjugate(current_rot) * future_rot
+                    future_forward = rel_rot * fw
+
+                    feature_frame.future_position.append(rel_pos)
+                    feature_frame.future_orientation.append(future_forward)
+            else:
+                prev_valid = self.feature_frames[num_frames - 61]
+                feature_frame.future_position = list(prev_valid.future_position)
+                feature_frame.future_orientation = list(prev_valid.future_orientation)
+
+
     def build_quaternion_frames(self, joint_order):
-        for frame in self.motion_data:
+        for idx, frame in enumerate(self.motion_data):
             motion_frame = MotionFrame()
             channel_index = 0
             for joint in joint_order:
@@ -98,6 +168,7 @@ class Motion:
 
 
                 motion_frame.joint_rotations[joint.name] = quat
+
                 if "position" in ''.join(joint.channels):
                     motion_frame.joint_positions[joint.name] = position
 
@@ -281,3 +352,20 @@ def connect(motion1, motion2, transition_frames=100, start_index_m2=3):
 
     new_motion.frames = len(new_motion.quaternion_frames)
     return new_motion
+
+def get_joint_chains_from_root(root):
+    leaf_chains = []
+
+    def dfs(current_joint, path):
+        path = path + [current_joint]
+
+        if current_joint.name in ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot']:
+            # 말단 joint
+            leaf_chains.append(path)
+        else:
+            for child in current_joint.children:
+                dfs(child, path)
+
+    dfs(root, [])
+    print(leaf_chains)
+    return leaf_chains

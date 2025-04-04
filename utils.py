@@ -86,7 +86,7 @@ def draw_colored_sphere(radius):
     gluDeleteQuadric(quadric)  # 다 쓰고 이렇게 삭제해줘야 되더라
 
 
-def draw_axes(grid_size = 500, step = 10):
+def draw_axes(grid_size = 500, step = 3):
     """
     축과 격자를 그리기 위한 함수입니다.
     grid_size를 미리 정의해서 그 길이만큼 격자랑 XYZ axis 그리게 해두었습니다.
@@ -235,4 +235,35 @@ def draw_arrow(circle_radius, arrow_length, color):
     glVertex3f(head[0], 0, head[2])
     glVertex3f(left[0], 0, left[2])
     glVertex3f(right[0], 0, right[2])
+    glEnd()
+
+
+def draw_arrow_from_direction(forward_vec: glm.vec3, arrow_length=4, color=(1.0, 0.0, 0.0)):
+    f = np.array([forward_vec.x, 0.0, forward_vec.z], dtype=np.float32)
+    norm = np.linalg.norm(f) + 1e-8
+    dir = f / norm
+
+    tail = np.array([0.0, 0.0, 0.0])
+    head = dir * arrow_length
+
+    glColor3fv(color)
+
+    # 몸통
+    glBegin(GL_LINES)
+    glVertex3f(tail[0], 0.0, tail[2])
+    glVertex3f(head[0], 0.0, head[2])
+    glEnd()
+
+    # 화살촉
+    perp = np.array([-dir[2], 0, dir[0]])
+    arrow_head_width = arrow_length * 0.3
+    arrow_head_base = head - dir * (arrow_length * 0.5)
+
+    left = arrow_head_base + perp * arrow_head_width
+    right = arrow_head_base - perp * arrow_head_width
+
+    glBegin(GL_TRIANGLES)
+    glVertex3f(head[0], 0.0, head[2])
+    glVertex3f(left[0], 0.0, left[2])
+    glVertex3f(right[0], 0.0, right[2])
     glEnd()

@@ -9,7 +9,7 @@ from imgui.integrations.pygame import PygameRenderer
 from pyglm import glm
 
 from bvh_controller import parse_bvh, get_preorder_joint_list
-from Rendering import draw_humanoid, draw_virtual_root_axis
+from Rendering import draw_humanoid, draw_virtual_root_axis, draw_matching_features
 from utils import draw_axes, set_lights, random_color
 from virtual_transforms import extract_xz_plane
 import Events
@@ -17,11 +17,11 @@ import UI
 
 state = {
     'center': glm.vec3(0, 0, 0),
-    'eye': glm.vec3(60, 180, 600),
+    'eye': glm.vec3(20, 60, 200) * 0.5,
     'upVector': glm.vec3(0, 1, 0),
-    'distance': glm.length(glm.vec3(60, 180, 600) - glm.vec3(0, 0, 0)),
-    'yaw': math.atan2(60, 600),
-    'pitch': math.asin(180 / glm.length(glm.vec3(60, 180, 600))),
+    'distance': glm.length(glm.vec3(20, 60, 200)*0.5 - glm.vec3(0, 0, 0)),
+    'yaw': math.atan2(20, 200),
+    'pitch': math.asin(180 / glm.length(glm.vec3(20, 60, 200))),
     'last_x': 0,
     'last_y': 0,
     'is_rotating': False,
@@ -108,15 +108,12 @@ def main():
                                 motion_entry['root'].children[0].kinematics
                             ), motion_entry['color']
                         )
+                        draw_matching_features(motion_entry['root'], motion_entry['motion'].feature_frames[frame_idx])
 
         # --- ImGui 렌더링 영역 ---
         io.display_size = width, height
         imgui.new_frame()
         viewport = imgui.get_main_viewport()
-
-        # UI 호출 (한 번만 호출)
-        UI.draw_control_panel(state, viewport)
-        UI.draw_side_panel(state, viewport)
 
         imgui.render()
         impl.render(imgui.get_draw_data())
@@ -142,7 +139,7 @@ def main():
                     'motion': motion,
                     'frame_len': motion.frames,
                     'visible': True,
-                    'frame_idx': 0,
+                    'frame_idx': 1,
                     'color': random_color()
                 }
                 state['motions'].append(new_entry)
@@ -154,4 +151,22 @@ def main():
 
 
 if __name__ == "__main__":
+    file_path = "bvh/data/002/02_01.bvh"
+    root, motion = parse_bvh(file_path)
+    joint_order = get_preorder_joint_list(root)
+    motion.build_quaternion_frames(joint_order)
+    motion.apply_velocity_feature(root)
+    virtual_root = motion.apply_virtual(root)
+    motion.apply_future_feature()
+    new_entry = {
+        'name': file_path.split("/")[-1],
+        'root': virtual_root,
+        'motion': motion,
+        'frame_len': motion.frames,
+        'visible': True,
+        'frame_idx': 0,
+        'color': random_color()
+    }
+    state['motions'].append(new_entry)
+
     main()
