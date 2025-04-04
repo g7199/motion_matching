@@ -23,6 +23,10 @@ pip install PyOpenGL PyOpenGL_accelerate PyGLM imgui[glfw] pygame
 ```bash
 python main.py
 ```
+
+## Project Structure
+![Diagram](BVH_Viewer.drawio.svg)
+```plaintext
 .
 ├── Main.py                # Entry point: initialization, main loop, etc.
 ├── bvh_controller.py      # Module for parsing BVH files & adding the virtual root.
