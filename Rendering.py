@@ -70,7 +70,7 @@ def draw_virtual_root_axis(kinematics, color, circle_radius=2, arrow_length=4):
 
 def draw_matching_features(root_joint, frame, circle_radius = 2):
     if frame is not None:
-        glPushMatrix()
+        #glPushMatrix()
         glMultMatrixf(glm_mat4_to_glf(root_joint.kinematics))
 
         for pos, rot in zip(frame.future_position, frame.future_orientation):
@@ -84,4 +84,4 @@ def draw_matching_features(root_joint, frame, circle_radius = 2):
             draw_undercircle(circle_radius)
 
             glPopMatrix()
-        glPopMatrix()
+        #glPopMatrix()

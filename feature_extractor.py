@@ -34,6 +34,8 @@ class MotionKDTree:
         vec = []
         for v in frame.velocity.values():
             vec.extend([v.x, v.y, v.z])
+        for v in frame.site_positions.values():
+            vec.extend([v.x, v.y, v.z])
         for p in frame.future_position:
             vec.extend([p.x, p.y, p.z])
         for f in frame.future_orientation:
@@ -48,9 +50,13 @@ class MotionKDTree:
                 if idx:  # skip frame 0 if needed
                     vec = self.extract_feature_vector(frame)
                     self.feature_vectors.append(vec)
-                    self.index_map.append((motion, idx))
+                    self.index_map.append((motion, idx, path))
         self.tree = KDTree(np.array(self.feature_vectors))
 
     def search(self, query_vec):
         _, idx = self.tree.query(query_vec)
         return self.index_map[idx]
+    
+    def search_frame(self, query_frame):
+        query_vec = self.extract_feature_vector(query_frame)
+        return self.search(query_vec)

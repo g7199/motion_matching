@@ -3,9 +3,78 @@ from pygame.locals import *
 import pygame
 from pyglm import glm
 
-"""
-마우스, 키보드 event를 처리하기 위한 함수입니다.
-"""
+class InputController:
+    def __init__(self, max_speed=40.0, turn_strength=1.0):
+        self.max_speed = max_speed
+        self.turn_strength = turn_strength
+        self.current_forward = glm.vec3(0, 0, 1)
+        self.input_state = {'W': False, 'A': False, 'S': False, 'D': False}
+        self.prev_pos = glm.vec3(0, 0, 0)
+        self.acceleration = 2.0 
+        self.deceleration = 3.0 
+        self.current_velocity = glm.vec3(0)
+
+    def update(self, keys):
+        self.input_state['W'] = keys[pygame.K_w]
+        self.input_state['A'] = keys[pygame.K_a]
+        self.input_state['S'] = keys[pygame.K_s]
+        self.input_state['D'] = keys[pygame.K_d]
+
+    def compute_velocity(self, delta_time):
+        vel = glm.vec3(0)
+        if self.input_state['W']: vel += glm.vec3(0, 0, -1)
+        if self.input_state['S']: vel += glm.vec3(0, 0, 1)
+        if self.input_state['A']: vel += glm.vec3(-1, 0, 0)
+        if self.input_state['D']: vel += glm.vec3(1, 0, 0)
+
+        if glm.length(vel) > 0:
+            vel = glm.normalize(vel) * self.max_speed
+            self.current_velocity += (vel - self.current_velocity) * self.acceleration * delta_time
+        else:
+            self.current_velocity -= self.current_velocity * self.deceleration * delta_time
+            
+        return self.current_velocity
+
+    def compute_vel_forward(self, delta_time):
+        vel = self.compute_velocity(delta_time)
+        turn_rate = 0.0
+
+        if glm.length(vel) > 0:
+            desired = glm.normalize(vel)
+
+            # 회전 전에 이전 방향 저장
+            prev_forward = glm.normalize(self.current_forward)
+
+            # 방향 보간
+            q_current = glm.quat(glm.vec3(0, 0, 1), prev_forward)
+            q_target = glm.quat(glm.vec3(0, 0, 1), desired)
+
+            speed = glm.length(vel)
+            slerp_amount = min(0.2, speed * 0.02)
+
+            q_new = glm.slerp(q_current, q_target, slerp_amount)
+            self.current_forward = glm.normalize(q_new * glm.vec3(0, 0, 1))
+
+            # 회전 각도 계산
+            dot = glm.clamp(glm.dot(prev_forward, self.current_forward), -1.0, 1.0)
+            angle = glm.acos(dot)
+            cross = glm.cross(prev_forward, self.current_forward)
+            if cross.y < 0:
+                angle *= -1
+            turn_rate = angle / delta_time
+
+        return vel, self.current_forward, turn_rate
+    
+    def update_virtual_kinematics(self, virtual_root, delta_time):
+        velocity, direction, turn_rate = self.compute_vel_forward(delta_time)
+        new_pos = self.prev_pos + velocity * delta_time
+        base_forward = glm.vec3(0,0,1)
+        rot_quat = glm.quat(base_forward, glm.normalize(self.current_forward))
+        virtual_root.kinematics = glm.translate(glm.mat4(1.0), new_pos) * glm.mat4_cast(rot_quat)
+        self.prev_pos = new_pos
+
+        return new_pos, direction, turn_rate
+
 
 def update_eye(center, distance, yaw, pitch):
     """
