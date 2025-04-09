@@ -7,9 +7,12 @@ from tqdm import tqdm
 class MotionKDTree:
     def __init__(self, root_path):
         self.bvh_paths = self.find_all_bvh_files(root_path)
-        self.feature_vectors = []
         self.index_map = []
         self.tree = None
+        self.mean = None
+        self.std = None
+        self.feature_vectors = []
+        self.weights = []
         self.build()
 
     def find_all_bvh_files(self, root_folder):
@@ -25,8 +28,8 @@ class MotionKDTree:
         root, motion = parse_bvh(filepath)
         joint_order = get_preorder_joint_list(root)
         motion.build_quaternion_frames(joint_order)
-        motion.apply_velocity_feature(root)
-        motion.apply_virtual(root)
+        virtual = motion.apply_virtual(root)
+        motion.apply_velocity_feature(virtual)
         motion.apply_future_feature()
         return motion
 
@@ -41,22 +44,50 @@ class MotionKDTree:
         for f in frame.future_orientation:
             vec.extend([f.x, f.y, f.z])
         return np.array(vec, dtype=np.float32)
+    
+    def normalize(self, vec):
+        z = (vec - self.mean) / self.std
+        return z * self.weights 
 
     def build(self):
         print("building KDTree")
+        feature_vectors = []
         for path in tqdm(self.bvh_paths):
             motion = self.read_bvh_file(path)
             for idx, frame in enumerate(motion.feature_frames):
                 if idx:  # skip frame 0 if needed
                     vec = self.extract_feature_vector(frame)
-                    self.feature_vectors.append(vec)
+                    feature_vectors.append(vec)
                     self.index_map.append((motion, idx, path))
-        self.tree = KDTree(np.array(self.feature_vectors))
+
+        self.mean = np.mean(feature_vectors, axis=0)
+        self.std = np.std(feature_vectors, axis=0) + 1e-8
+        self.weights = self.compute_weights()
+
+        for vec in feature_vectors:
+            #print(vec)
+            normalized = self.normalize(np.array(vec))
+            self.feature_vectors.append(normalized)
+
+        self.tree = KDTree(self.feature_vectors)
 
     def search(self, query_vec):
-        _, idx = self.tree.query(query_vec)
-        return self.index_map[idx]
+        dist, idx = self.tree.query(query_vec)
+        return dist, self.index_map[idx], self.normalize(query_vec)
+    
+    def compute_weights(self):
+        # hip velocity: 3, site velocity: 6, site pos: 6, future pos: 9, future ori: remainder
+        w = []
+        w += [2.0] * 3    # hip velocity
+        w += [1.0] * 6    # site velocities
+        w += [0.0] * 3    # handling hip position
+        w += [0.2] * 6    # site positions
+        w += [0.5] * 9    # future position
+        w += [1.0] * 9  # future orientation
+        return np.array(w, dtype=np.float32)
     
     def search_frame(self, query_frame):
         query_vec = self.extract_feature_vector(query_frame)
+        query_vec = self.normalize(query_vec)
+
         return self.search(query_vec)

@@ -47,7 +47,7 @@ class Motion:
         self.frame_time = frame_time
         self.motion_data = []
         self.quaternion_frames = []
-        self.feature_frames = [None]
+        self.feature_frames = []
 
     def get_frames(self):
         return self.frames
@@ -66,49 +66,45 @@ class Motion:
     def add_frame_data(self, frame_data):
         self.motion_data.append(frame_data)
 
-    #virtual 이전 적용
     def apply_velocity_feature(self, root):
         joint_chains = get_joint_chains_from_root(root)
 
         for idx, frame in enumerate(self.quaternion_frames):
-            if idx:
-                feature_frame = FeatureFrame()
-                if idx == 1:
-                    feature_frame.velocity[root.name] = glm.vec3(0,0,0)
-                else:
-                    feature_frame.velocity[root.name] = (frame.joint_positions[root.name] - self.quaternion_frames[idx-1].joint_positions[root.name])
+            feature_frame = FeatureFrame()
 
+            if idx == 0:
                 for chain in joint_chains:
-                    pos = frame.joint_positions[root.name]
-                    rot = frame.joint_rotations[root.name]
+                    feature_frame.site_positions[chain[-1].name] = glm.vec3(0,0,0)
+                    feature_frame.velocity[chain[-1].name] = glm.vec3(0,0,0)
 
-                    for joint in chain[1:]:
+            else:
+                pos = frame.joint_positions[root.name] + frame.joint_positions[root.children[0].name]
+                feature_frame.site_positions["Hips"] = pos
+                vel = (pos - self.feature_frames[idx-1].site_positions["Hips"])
+                vel = glm.conjugate(frame.joint_rotations[root.name]) * vel
+                feature_frame.velocity["Hips"] = vel / self.frame_time
+                
+                for chain in joint_chains[1:]:
+                    pos = glm.vec3(0)
+                    rot = rot = glm.quat(1, 0, 0, 0)
+
+                    for joint in chain:
                         offset = joint.offset
                         q_local = frame.joint_rotations[joint.name]
 
                         offset_rotated = rot * offset
                         pos = pos + offset_rotated
                         rot = rot * q_local
+                    feature_frame.site_positions[chain[-1].name] = pos
+                    feature_frame.velocity[chain[-1].name] = (pos - self.feature_frames[idx-1].site_positions[chain[-1].name]) / self.frame_time
+            
+            self.feature_frames.append(feature_frame)
 
-                    if idx == 1:
-                        feature_frame.site_positions[chain[-1].name] = pos
-                        feature_frame.velocity[chain[-1].name] = glm.vec3(0,0,0)
-
-                    else:
-                        feature_frame.site_positions[chain[-1].name] = pos
-                        feature_frame.velocity[chain[-1].name] = (pos - self.feature_frames[idx-1].site_positions[chain[-1].name])
-                
-                self.feature_frames.append(feature_frame)
-
-    #virtual 이후 적용
     def apply_future_feature(self):
         fw = glm.vec3(0, 0, 1)
         num_frames = len(self.quaternion_frames)
 
         for idx, frame in enumerate(self.quaternion_frames):
-            if idx == 0:
-                continue
-
             feature_frame = self.feature_frames[idx]
             current_pos = frame.joint_positions["VirtualRoot"]
             current_rot = frame.joint_rotations["VirtualRoot"]
@@ -126,9 +122,14 @@ class Motion:
                     feature_frame.future_position.append(rel_pos)
                     feature_frame.future_orientation.append(future_forward)
             else:
-                prev_valid = self.feature_frames[num_frames - 61]
-                feature_frame.future_position = list(prev_valid.future_position)
-                feature_frame.future_orientation = list(prev_valid.future_orientation)
+                if num_frames < 61:
+                    for _ in range(3):
+                        feature_frame.future_position.append(glm.vec3(0,0,0))
+                        feature_frame.future_orientation.append(glm.vec3(0,0,0))
+                else:
+                    prev_valid = self.feature_frames[num_frames-61]
+                    feature_frame.future_position = list(prev_valid.future_position)
+                    feature_frame.future_orientation = list(prev_valid.future_orientation)
 
 
     def build_quaternion_frames(self, joint_order):
@@ -280,11 +281,11 @@ def get_preorder_joint_list(root_joint):
     traverse(root_joint)
     return joint_list
 
-def connect(motion1, motion2, transition_frames=100, start_index_m2=3):
+def connect(motion1, motion2, start_index_new, transition_frames=20, start_index_m2=0):
     if abs(motion1.frame_time - motion2.frame_time) > 1e-6:
         raise ValueError("Frame times of the two motions do not match.")
     if transition_frames > motion1.get_frames() or transition_frames > (motion2.get_frames() - start_index_m2):
-        raise ValueError("Not enough frames to perform blending with the requested transition_frames.")
+        return motion2
 
     new_motion = Motion(0, motion1.frame_time)
 
@@ -294,25 +295,28 @@ def connect(motion1, motion2, transition_frames=100, start_index_m2=3):
 
     p1 = last_frame_m1.joint_positions["VirtualRoot"]
     p2 = first_frame_m2.joint_positions["VirtualRoot"]
-    position_offset = p1 - p2
 
     r1 = last_frame_m1.joint_rotations["VirtualRoot"]
     r2 = first_frame_m2.joint_rotations["VirtualRoot"]
     rotation_offset = r1 * glm.conjugate(r2)
+    position_offset = p1 - rotation_offset * p2
 
     # 2. motion2 복사본 생성 + VirtualRoot offset 적용
     adjusted_motion2 = []
-    for frame in motion2.quaternion_frames:
+
+    for i, frame in enumerate(motion2.quaternion_frames):
         new_frame = MotionFrame()
+        apply_offset = (i >= start_index_m2)  # start_index_m2부터만 offset 적용
+
         for joint_name, quat in frame.joint_rotations.items():
-            if joint_name == "VirtualRoot":
+            if joint_name == "VirtualRoot" and apply_offset:
                 new_frame.joint_rotations[joint_name] = rotation_offset * quat
             else:
                 new_frame.joint_rotations[joint_name] = quat
 
         for joint_name, pos in frame.joint_positions.items():
-            if joint_name == "VirtualRoot":
-                new_frame.joint_positions[joint_name] = pos + position_offset
+            if joint_name == "VirtualRoot" and apply_offset:
+                new_frame.joint_positions[joint_name] = rotation_offset * pos + position_offset
             else:
                 new_frame.joint_positions[joint_name] = pos
 
@@ -351,15 +355,15 @@ def connect(motion1, motion2, transition_frames=100, start_index_m2=3):
         new_motion.quaternion_frames.append(frame)
 
     new_motion.frames = len(new_motion.quaternion_frames)
-    return new_motion
+    return new_motion[start_index_new:]
 
 def get_joint_chains_from_root(root):
-    leaf_chains = []
+    leaf_chains = [[root, root.children[0]]]
 
     def dfs(current_joint, path):
         path = path + [current_joint]
 
-        if current_joint.name in ['LeftHand', 'RightHand', 'LeftFoot', 'RightFoot']:
+        if current_joint.name in ['LeftFoot', 'RightFoot']:
             # 말단 joint
             leaf_chains.append(path)
         else:

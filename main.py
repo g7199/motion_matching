@@ -6,7 +6,7 @@ from OpenGL.GLU import *
 import imgui
 from imgui.integrations.pygame import PygameRenderer
 from pyglm import glm
-from bvh_controller import parse_bvh, get_preorder_joint_list, FeatureFrame, get_joint_chains_from_root
+from bvh_controller import parse_bvh, get_preorder_joint_list, FeatureFrame, get_joint_chains_from_root, connect
 from Rendering import draw_humanoid, draw_virtual_root_axis, draw_matching_features
 from utils import draw_axes, set_lights, random_color
 from virtual_transforms import extract_xz_plane
@@ -14,6 +14,7 @@ import Events
 import UI
 from feature_extractor import MotionKDTree
 import numpy as np
+import copy
 
 
 tk.Tk().withdraw()
@@ -55,46 +56,49 @@ def make_default_feature_frame(virtual_root, feature_frame):
         feature_frame.future_orientation.append(zero)
     return feature_frame
 
-def make_current_feature_frame(virtual_root, before_feature_frame, delta_time, hip_velocity, current_pos, current_dir, turn_rate):
-    feature_frame = FeatureFrame()
-    joint_chains = get_joint_chains_from_root(virtual_root)
-    root_name = virtual_root.children[0].name
-    feature_frame.velocity[root_name] = hip_velocity
-    for chain in joint_chains:
-        global_transform = glm.mat4(virtual_root.kinematics)
-        for joint in chain:
-            global_transform *= joint.kinematics
-        pos = global_transform * glm.vec4(0, 0, 0, 1)
-        feature_frame.site_positions[chain[-1].name] = glm.vec3(pos.x, pos.y, pos.z)
-    for joint_name in feature_frame.site_positions:
-        v = feature_frame.site_positions[joint_name] - before_feature_frame.site_positions[joint_name]
-        feature_frame.velocity[joint_name] = v / delta_time
+def make_current_feature_frame(vr, motion, idx, delta_time, hip_velocity, current_pos, current_dir, turn_rate):
+    feature_frame = copy.deepcopy(motion.feature_frames[idx])
+    feature_frame.future_position = []
+    feature_frame.future_orientation = []
+
+    feature_frame.velocity["Hips"] = hip_velocity
+    inv_root_tf = glm.inverse(vr.kinematics)
+
+    # future prediction (turning & moving forward)
     steps = [20, 40, 60]
     dir = glm.normalize(current_dir)
     speed = glm.length(hip_velocity)
+
     for k in steps:
         t = k * delta_time
         angle = turn_rate * t
-        rot_quat = glm.angleAxis(angle, glm.vec3(0, 1, 0))
+        rot_quat = glm.angleAxis(angle, glm.vec3(0, 1, 0))  # 회전 축: Y축
+
+        # 목표 방향과 slerp blending
         target_dir = glm.normalize(rot_quat * dir)
         q_current = glm.quat(glm.vec3(0, 0, 1), dir)
         q_target = glm.quat(glm.vec3(0, 0, 1), target_dir)
-        slerp_ratio = 0.5
-        q_blended = glm.slerp(q_current, q_target, slerp_ratio)
+        q_blended = glm.slerp(q_current, q_target, 0.5)
         rotated_dir = glm.normalize(q_blended * glm.vec3(0, 0, 1))
+
         predicted_pos = current_pos + rotated_dir * speed * t
-        rel_pos = glm.vec3(glm.inverse(virtual_root.kinematics) * glm.vec4(predicted_pos - current_pos, 0))
-        rel_dir = glm.normalize(glm.vec3(glm.inverse(virtual_root.kinematics) * glm.vec4(rotated_dir, 0)))
+
+        # local 기준 상대 위치/방향으로 변환
+        rel_pos = glm.vec3(inv_root_tf * glm.vec4(predicted_pos - current_pos, 0.0))
+        rel_dir = glm.normalize(glm.vec3(inv_root_tf * glm.vec4(rotated_dir, 0.0)))
+
         feature_frame.future_position.append(rel_pos)
         feature_frame.future_orientation.append(rel_dir)
+
     return feature_frame
+
 
 def init_motion(file_path):
     root, motion = parse_bvh(file_path)
     joint_order = get_preorder_joint_list(root)
     motion.build_quaternion_frames(joint_order)
-    motion.apply_velocity_feature(root)
     virtual_root = motion.apply_virtual(root)
+    motion.apply_velocity_feature(virtual_root)
     motion.apply_future_feature()
     cur_feature = make_default_feature_frame(virtual_root, FeatureFrame())
     new_entry = {
@@ -107,10 +111,19 @@ def init_motion(file_path):
         'color': random_color(),
         'controller': Events.InputController(),
         'current_feature': cur_feature,
-        'last_matched_frame': -10
+        'count': -10
     }
     state['motions'].append(new_entry)
     print("File loaded:", file_path)
+
+def attatch_motion(root, motion):
+    joint_order = get_preorder_joint_list(root)
+    motion.build_quaternion_frames(joint_order)
+    virtual_root = motion.apply_virtual(root)
+    motion.apply_velocity_feature(virtual_root)
+    motion.apply_future_feature()
+    cur_feature = make_default_feature_frame(virtual_root, FeatureFrame())
+    return cur_feature
 
 def main():
     pygame.init()
@@ -125,7 +138,7 @@ def main():
     clock = pygame.time.Clock()
     running = True
 
-    search_interval = 10
+    search_interval = 30
     distance_threshold = 60.0
 
     while running:
@@ -176,7 +189,8 @@ def main():
                     pos, dir, turn_rate = controller.update_virtual_kinematics(motion_entry['root'], motion_entry['motion'].frame_time)
                     motion_entry['current_feature'] = make_current_feature_frame(
                         motion_entry['root'],
-                        motion_entry['current_feature'],
+                        motion_entry['motion'],
+                        motion_entry['frame_idx'],
                         motion_entry['motion'].frame_time,
                         controller.current_velocity,
                         pos, dir, turn_rate
@@ -190,31 +204,27 @@ def main():
                             ), motion_entry['color']
                         )
                         draw_matching_features(motion_entry['root'], motion_entry['current_feature'])
-
-                    if frame_idx - motion_entry['last_matched_frame'] >= search_interval:
-                        query_vec = tree.extract_feature_vector(motion_entry['current_feature'])
-                        dist, idx = tree.tree.query(query_vec)
+                    motion_entry['count'] += 1
+                    if motion_entry['count'] >= search_interval:
+                        dist, [matched_motion, matched_idx, path], query_vec = tree.search_frame(motion_entry['current_feature'])
 
                         if dist < distance_threshold:
-                            matched_motion, matched_idx, path = tree.index_map[idx]
-                            matched_vec = tree.feature_vectors[idx]
+                            matched_vec = tree.feature_vectors[matched_idx]
 
-                            motion_entry['motion'] = matched_motion
-                            motion_entry['frame_idx'] = matched_idx
-                            motion_entry['last_matched_frame'] = frame_idx
+                            if motion_entry['name'] != path.split("/")[-1]:
 
-                            print(f"[MATCH] {path} @ {matched_idx} (distance: {dist:.2f})")
+                                new_motion = connect(motion_entry['motion'][motion_entry['frame_idx']:], matched_motion[matched_idx:], 0)
 
-                            # --- 추가 출력: 벡터 비교 ---
-                            np.set_printoptions(precision=3, suppress=True, linewidth=120)
-                            print("▶ query_vec:")
-                            print(query_vec)
+                                print(motion_entry['frame_len'])
+                                motion_entry['motion'] = new_motion
+                                motion_entry['name'] = path.split("/")[-1]
+                                motion_entry['frame_idx'] = 0
+                                motion_entry['frame_len'] = new_motion.frames
+                                motion_entry['count'] = 0
+                                motion_entry['current_feature'] = attatch_motion(motion_entry['root'].children[0], new_motion)
 
-                            print("▶ matched_vec:")
-                            print(matched_vec)
+                                print(f"[MATCH] {path} @ {matched_idx} (distance: {dist:.2f})")
 
-                            print("▶ diff (query - matched):")
-                            print(query_vec - matched_vec)
 
         io.display_size = width, height
         imgui.new_frame()
@@ -237,7 +247,7 @@ def main():
     pygame.quit()
 
 if __name__ == "__main__":
-    file_path = "./bvh/data/002/02_03.bvh"
+    file_path = "./bvh/data/002/02_01.bvh"
     root_path = './bvh/data/exp'
     init_motion(file_path)
     tree = MotionKDTree(root_path)

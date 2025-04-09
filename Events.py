@@ -4,13 +4,13 @@ import pygame
 from pyglm import glm
 
 class InputController:
-    def __init__(self, max_speed=40.0, turn_strength=1.0):
+    def __init__(self, max_speed=50.0, turn_strength=1.0):
         self.max_speed = max_speed
         self.turn_strength = turn_strength
         self.current_forward = glm.vec3(0, 0, 1)
         self.input_state = {'W': False, 'A': False, 'S': False, 'D': False}
         self.prev_pos = glm.vec3(0, 0, 0)
-        self.acceleration = 2.0 
+        self.acceleration = 1.2 
         self.deceleration = 3.0 
         self.current_velocity = glm.vec3(0)
 
