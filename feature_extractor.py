@@ -33,16 +33,18 @@ class MotionKDTree:
         motion.apply_future_feature()
         return motion
 
-    def extract_feature_vector(self, frame):
+    def extract_feature_vector(self, frame, quaternion_frame):
         vec = []
         for v in frame.velocity.values():
             vec.extend([v.x, v.y, v.z])
         for v in frame.site_positions.values():
             vec.extend([v.x, v.y, v.z])
         for p in frame.future_position:
-            vec.extend([p.x, p.y, p.z])
+            vec.extend([p.x, p.z])
         for f in frame.future_orientation:
-            vec.extend([f.x, f.y, f.z])
+            vec.extend([f.x, f.z])
+        for q in quaternion_frame.joint_rotations.values():
+            vec.extend([q.w, q.x, q.y, q.z])
         return np.array(vec, dtype=np.float32)
     
     def normalize(self, vec):
@@ -54,9 +56,9 @@ class MotionKDTree:
         feature_vectors = []
         for path in tqdm(self.bvh_paths):
             motion = self.read_bvh_file(path)
-            for idx, frame in enumerate(motion.feature_frames):
+            for idx, frame in enumerate(motion.feature_frames[:-21]):
                 if idx:  # skip frame 0 if needed
-                    vec = self.extract_feature_vector(frame)
+                    vec = self.extract_feature_vector(frame, motion.quaternion_frames[idx])
                     feature_vectors.append(vec)
                     self.index_map.append((motion, idx, path))
 
@@ -73,21 +75,25 @@ class MotionKDTree:
 
     def search(self, query_vec):
         dist, idx = self.tree.query(query_vec)
-        return dist, self.index_map[idx], self.normalize(query_vec)
+        return dist, self.index_map[idx], query_vec
     
-    def compute_weights(self):
+    def compute_weights(self, quaternion_length =132):
         # hip velocity: 3, site velocity: 6, site pos: 6, future pos: 9, future ori: remainder
         w = []
-        w += [2.0] * 3    # hip velocity
-        w += [1.0] * 6    # site velocities
+        w += [0.75] * 3    # hip velocity
+        w += [1.5] * 6    # site velocities
         w += [0.0] * 3    # handling hip position
-        w += [0.2] * 6    # site positions
-        w += [0.5] * 9    # future position
-        w += [1.0] * 9  # future orientation
+        w += [1.5] * 6    # site positions
+        w += [1.0] * 6    # future position
+        w += [1.0] * 6  # future orientation
+        w += [0.2] * quaternion_length
         return np.array(w, dtype=np.float32)
     
-    def search_frame(self, query_frame):
-        query_vec = self.extract_feature_vector(query_frame)
+    def search_frame(self, query_frame, quaternion_frame):
+        query_vec = self.extract_feature_vector(query_frame, quaternion_frame)
         query_vec = self.normalize(query_vec)
 
         return self.search(query_vec)
+
+    def distance_function(self, a, b):
+        return np.linalg.norm(a - b)

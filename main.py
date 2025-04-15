@@ -111,7 +111,7 @@ def init_motion(file_path):
         'color': random_color(),
         'controller': Events.InputController(),
         'current_feature': cur_feature,
-        'count': -10
+        'count': 0
     }
     state['motions'].append(new_entry)
     print("File loaded:", file_path)
@@ -138,8 +138,8 @@ def main():
     clock = pygame.time.Clock()
     running = True
 
-    search_interval = 30
-    distance_threshold = 60.0
+    search_interval = 50
+    motion_penalty = 5.0
 
     while running:
         for event in pygame.event.get():
@@ -179,10 +179,10 @@ def main():
                 if motion_entry.get('visible', True):
                     controller = motion_entry['controller']
                     keys = pygame.key.get_pressed()
-                    controller.update(keys)
+                    controller.update(keys)  
 
                     if not state['stop']:
-                        motion_entry['frame_idx'] = (motion_entry['frame_idx'] + 1) % motion_entry['frame_len']
+                        motion_entry['frame_idx'] = motion_entry['frame_idx'] + 1
 
                     frame_idx = motion_entry['frame_idx']
                     motion_entry['motion'].apply_to_skeleton(frame_idx, motion_entry['root'])
@@ -205,25 +205,35 @@ def main():
                         )
                         draw_matching_features(motion_entry['root'], motion_entry['current_feature'])
                     motion_entry['count'] += 1
+
+                    if frame_idx + 21 > motion_entry['frame_len']:
+                        motion_entry['count'] = 1000
                     if motion_entry['count'] >= search_interval:
-                        dist, [matched_motion, matched_idx, path], query_vec = tree.search_frame(motion_entry['current_feature'])
+                        dist, [matched_motion, matched_idx, path], query_vec = tree.search_frame(motion_entry['current_feature'], motion_entry['motion'].quaternion_frames[frame_idx])
 
-                        if dist < distance_threshold:
-                            matched_vec = tree.feature_vectors[matched_idx]
+                        if frame_idx + 21 < motion_entry['frame_len']:
+                            current_next_feature = motion_entry['motion'].feature_frames[frame_idx + 1]
+                            current_next_joint = motion_entry['motion'].quaternion_frames[frame_idx + 1]
+                            current_next_vec = tree.extract_feature_vector(current_next_feature, current_next_joint)
+                            current_next_vec = tree.normalize(current_next_vec)
+                            dist_current = tree.distance_function(query_vec, current_next_vec)
+                        else:
+                            dist_current = float('inf')
 
-                            if motion_entry['name'] != path.split("/")[-1]:
+                        if dist + motion_penalty < dist_current:
+                            new_motion = connect(motion_entry['motion'][motion_entry['frame_idx']:motion_entry['frame_idx']+20],
+                                                matched_motion[matched_idx:], 0, transition_frames=20)
 
-                                new_motion = connect(motion_entry['motion'][motion_entry['frame_idx']:], matched_motion[matched_idx:], 0)
+                            motion_entry['motion'] = new_motion
+                            motion_entry['name'] = path.split("/")[-1]
+                            motion_entry['frame_idx'] = 0
+                            motion_entry['frame_len'] = new_motion.frames
+                            motion_entry['count'] = 0
+                            motion_entry['current_feature'] = attatch_motion(motion_entry['root'].children[0], new_motion)
 
-                                print(motion_entry['frame_len'])
-                                motion_entry['motion'] = new_motion
-                                motion_entry['name'] = path.split("/")[-1]
-                                motion_entry['frame_idx'] = 0
-                                motion_entry['frame_len'] = new_motion.frames
-                                motion_entry['count'] = 0
-                                motion_entry['current_feature'] = attatch_motion(motion_entry['root'].children[0], new_motion)
-
-                                print(f"[MATCH] {path} @ {matched_idx} (distance: {dist:.2f})")
+                            print(f"[SMART MATCH] {path} @ {matched_idx} (better distance: {dist:.2f} < {dist_current:.2f})")
+                        else:
+                            motion_entry['count'] = 0
 
 
         io.display_size = width, height
@@ -247,7 +257,7 @@ def main():
     pygame.quit()
 
 if __name__ == "__main__":
-    file_path = "./bvh/data/002/02_01.bvh"
+    file_path = "./bvh/data/exp/slow_walk.bvh"
     root_path = './bvh/data/exp'
     init_motion(file_path)
     tree = MotionKDTree(root_path)

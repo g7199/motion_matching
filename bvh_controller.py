@@ -1,5 +1,5 @@
 from pyglm import glm
-from virtual_transforms import get_pelvis_virtual, get_pelvis_virtual_safe
+from virtual_transforms import get_pelvis_virtual_safe
 import math
 import numpy as np
 
@@ -285,6 +285,8 @@ def connect(motion1, motion2, start_index_new, transition_frames=20, start_index
     if abs(motion1.frame_time - motion2.frame_time) > 1e-6:
         raise ValueError("Frame times of the two motions do not match.")
     if transition_frames > motion1.get_frames() or transition_frames > (motion2.get_frames() - start_index_m2):
+        print("-----------------excep---------------------")
+        print(motion1.get_frames())
         return motion2
 
     new_motion = Motion(0, motion1.frame_time)
